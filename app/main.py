@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.models.environment import EnvironmentalObservation
 
 app = FastAPI(
     title = "Biodiversity AI",
@@ -15,4 +16,13 @@ def health():
     return {
         "status": "healthy",
         "service": "biodiversity-ai"
+    }
+
+@app.post("/environment")
+def create_environment(
+    observation: EnvironmentalObservation
+):
+    return {
+        "message": "Environmental observation received",
+        "data": observation
     }
