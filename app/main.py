@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation as EnvironmentalObservationDB
 from app.models.schemas import EnvironmentalObservation
-from app.knowledge.synthesis import generate_grounded_recommendation
+from app.agent.workflow import biodiversity_agent
+from app.config import settings
 
 
 app = FastAPI(
@@ -56,9 +57,9 @@ def get_recommendation_for_observation(
     db: Session = Depends(get_db),
 ):
     """
-    Triggers grounded scientific RAG synthesis for a stored EnvironmentalObservation ID.
+    Triggers the multi-step LangGraph Agent workflow for a stored EnvironmentalObservation ID.
+    Executes grounding, two-stage vector retrieval, LLM synthesis, and provenance self-validation.
     """
-    # Fixed: Query the SQLAlchemy ORM model (EnvironmentalObservationDB), not the Pydantic schema
     obs = (
         db.query(EnvironmentalObservationDB)
         .filter(EnvironmentalObservationDB.id == observation_id)
@@ -70,5 +71,26 @@ def get_recommendation_for_observation(
             detail=f"Environmental observation with ID {observation_id} not found.",
         )
 
-    recommendation_payload = generate_grounded_recommendation(db, obs)
-    return recommendation_payload
+    initial_state = {
+        "observation_id": obs.id,
+        "observation": obs,
+        "db": db,
+        "generated_queries": [],
+        "scientific_evidence": [],
+        "recommendation_response": {},
+        "validation_passed": False,
+        "errors": [],
+    }
+
+    final_state = biodiversity_agent.invoke(initial_state)
+
+    if not final_state["validation_passed"]:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": "Agent provenance validation failed.",
+                "errors": final_state["errors"],
+            },
+        )
+
+    return final_state["recommendation_response"]

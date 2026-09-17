@@ -8,6 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from app.models.db_models import EnvironmentalObservation
 from app.knowledge.grounding import analyze_observation_with_grounding
 from app.models.schemas import GroundedRecommendationResponse, ActionableRecommendation, CitationSchema
+from app.config import settings
 
 load_dotenv()
 
@@ -60,8 +61,8 @@ def generate_grounded_recommendation(
 
     # 3. LangChain + Groq Structured Output Workflow
     llm = ChatGroq(
-        model=os.getenv("LLM_MODEL",""),
-        temperature=0.1,
+        model=settings.LLM_MODEL_NAME,
+        temperature=settings.LLM_TEMPERATURE,
         api_key=api_key,
     )
 
