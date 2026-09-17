@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, JSON
 from app.database import Base
 
 
@@ -25,3 +25,34 @@ class EnvironmentalObservation(Base):
 
     pollution_index = Column(Float, nullable=False)
     deforestation_rate = Column(Float, nullable=False)
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    title = Column(String, nullable=False)
+    source = Column(String, nullable=False)
+    organization = Column(String, nullable=False)
+
+    publication_date = Column(Date, nullable=True)
+
+    url = Column(String, nullable=True)
+    document_type = Column(String, nullable=False)
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    document_id = Column(
+        Integer,
+        ForeignKey("documents.id"),
+        nullable=False
+    )
+
+    chunk_text = Column(String, nullable=False)
+    page_number = Column(Integer, nullable=True)
+
+    chunk_metadata = Column(JSON, nullable=True)
