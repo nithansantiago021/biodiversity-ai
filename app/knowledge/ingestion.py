@@ -84,9 +84,11 @@ def create_document_chunks(
 ) -> list[DocumentChunk]:
     """
     Creates document chunks from page text, respecting natural sentence boundaries
-    and maintaining a controlled overlap, while preserving page-level provenance.
+    and maintaining controlled overlap, while enriching chunk metadata with document
+    provenance and sequential ordering.
     """
     chunks_to_add = []
+    chunk_index = 0
 
     for page in pages:
         page_number = page["page_number"]
@@ -103,7 +105,6 @@ def create_document_chunks(
         for sentence in sentences:
             sentence_len = len(sentence) + 1  # +1 for space
 
-            # If adding this sentence exceeds chunk_size and we already have content, finalize chunk
             if current_length + sentence_len > chunk_size and current_chunk_sentences:
                 chunk_text = " ".join(current_chunk_sentences)
                 chunks_to_add.append(
@@ -111,11 +112,18 @@ def create_document_chunks(
                         document_id=document.id,
                         page_number=page_number,
                         chunk_text=chunk_text,
-                        chunk_metadata={"source_page": page_number},
+                        chunk_metadata={
+                            "source_page": page_number,
+                            "chunk_index": chunk_index,
+                            "document_title": document.title,
+                            "organization": document.organization,
+                            "document_type": document.document_type,
+                        },
                     )
                 )
+                chunk_index += 1
 
-                # Keep trailing sentence(s) for overlap
+                # Overlap logic
                 overlap_sentences = []
                 overlap_length = 0
                 for s in reversed(current_chunk_sentences):
@@ -131,7 +139,7 @@ def create_document_chunks(
             current_chunk_sentences.append(sentence)
             current_length += sentence_len
 
-        # Finalize remaining sentences on the page
+        # Finalize remaining sentences on page
         if current_chunk_sentences:
             chunk_text = " ".join(current_chunk_sentences)
             chunks_to_add.append(
@@ -139,9 +147,16 @@ def create_document_chunks(
                     document_id=document.id,
                     page_number=page_number,
                     chunk_text=chunk_text,
-                    chunk_metadata={"source_page": page_number},
+                    chunk_metadata={
+                        "source_page": page_number,
+                        "chunk_index": chunk_index,
+                        "document_title": document.title,
+                        "organization": document.organization,
+                        "document_type": document.document_type,
+                    },
                 )
             )
+            chunk_index += 1
 
     db.add_all(chunks_to_add)
     db.commit()

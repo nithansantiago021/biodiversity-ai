@@ -1,4 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, JSON
+from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 from app.database import Base
 
 
@@ -56,3 +58,11 @@ class DocumentChunk(Base):
     page_number = Column(Integer, nullable=True)
 
     chunk_metadata = Column(JSON, nullable=True)
+
+    # Vector embedding column for similarity search
+    embedding = Column(Vector(384), nullable=True)
+
+    # Relationship back to parent document
+    document = relationship("Document", back_populates="chunks")
+
+Document.chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")

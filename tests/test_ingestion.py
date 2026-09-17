@@ -2,7 +2,7 @@ from app.database import SessionLocal
 from app.knowledge.ingestion import create_document, create_document_chunks
 
 
-def test_document_chunks_have_overlap():
+def test_document_chunks_have_overlap_and_rich_metadata():
     db = SessionLocal()
     document = None
     chunks = []
@@ -38,25 +38,18 @@ def test_document_chunks_have_overlap():
 
         assert len(chunks) >= 2
 
-        print("\n--- CHUNKS ---")
-        for index, chunk in enumerate(chunks, start=1):
-            print(f"Chunk {index}: {chunk.chunk_text}")
-        print("--- END CHUNKS ---")
-
-        # Consecutive chunks should share trailing context.
+        # Verify consecutive chunks share trailing context
         overlap_words = set(chunks[0].chunk_text.split()) & set(
             chunks[1].chunk_text.split()
         )
-
         assert overlap_words
 
-        # All chunks must remain on the same source page.
+        # Verify page provenance and rich metadata
         assert all(chunk.page_number == 1 for chunk in chunks)
-
-        # assert (
-        #     "microorganisms." in chunks[0].chunk_text
-        #     and "microorganisms." in chunks[1].chunk_text
-        # )
+        assert chunks[0].chunk_metadata["chunk_index"] == 0
+        assert chunks[1].chunk_metadata["chunk_index"] == 1
+        assert chunks[0].chunk_metadata["document_title"] == "Overlap Test Report"
+        assert chunks[0].chunk_metadata["organization"] == "Test Organization"
 
     finally:
         for chunk in chunks:
@@ -69,3 +62,4 @@ def test_document_chunks_have_overlap():
 
         db.commit()
         db.close()
+        
