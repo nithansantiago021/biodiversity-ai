@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
@@ -66,41 +67,82 @@ def create_document(
     return document
 
 
+def split_into_sentences(text: str) -> list[str]:
+    """Split text into sentences using basic punctuation boundaries."""
+    sentence_endings = re.compile(r"(?<=[.!?])\s+")
+    sentences = sentence_endings.split(text)
+    return [s.strip() for s in sentences if s.strip()]
+
+
 def create_document_chunks(
     db: Session,
     document: Document,
     pages: list[dict],
     *,
     chunk_size: int = 1000,
+    chunk_overlap: int = 200,
 ) -> list[DocumentChunk]:
     """
-    Split extracted page text into chunks while preserving page provenance.
-    A chunk never crosses a page boundary in this initial implementation.
+    Creates document chunks from page text, respecting natural sentence boundaries
+    and maintaining a controlled overlap, while preserving page-level provenance.
     """
-    chunks = []
+    chunks_to_add = []
 
     for page in pages:
-        text = page["text"]
         page_number = page["page_number"]
+        page_text = page["text"]
 
-        for start in range(0, len(text), chunk_size):
-            chunk_text = text[start : start + chunk_size].strip()
+        if not page_text:
+            continue
 
-            if not chunk_text:
-                continue
+        sentences = split_into_sentences(page_text)
 
-            chunk = DocumentChunk(
-                document_id=document.id,
-                chunk_text=chunk_text,
-                page_number=page_number,
-                chunk_metadata={
-                    "source_page": page_number,
-                },
+        current_chunk_sentences = []
+        current_length = 0
+
+        for sentence in sentences:
+            sentence_len = len(sentence) + 1  # +1 for space
+
+            # If adding this sentence exceeds chunk_size and we already have content, finalize chunk
+            if current_length + sentence_len > chunk_size and current_chunk_sentences:
+                chunk_text = " ".join(current_chunk_sentences)
+                chunks_to_add.append(
+                    DocumentChunk(
+                        document_id=document.id,
+                        page_number=page_number,
+                        chunk_text=chunk_text,
+                        chunk_metadata={"source_page": page_number},
+                    )
+                )
+
+                # Keep trailing sentence(s) for overlap
+                overlap_sentences = []
+                overlap_length = 0
+                for s in reversed(current_chunk_sentences):
+                    if overlap_length + len(s) + 1 <= chunk_overlap or not overlap_sentences:
+                        overlap_sentences.insert(0, s)
+                        overlap_length += len(s) + 1
+                    else:
+                        break
+
+                current_chunk_sentences = overlap_sentences
+                current_length = overlap_length
+
+            current_chunk_sentences.append(sentence)
+            current_length += sentence_len
+
+        # Finalize remaining sentences on the page
+        if current_chunk_sentences:
+            chunk_text = " ".join(current_chunk_sentences)
+            chunks_to_add.append(
+                DocumentChunk(
+                    document_id=document.id,
+                    page_number=page_number,
+                    chunk_text=chunk_text,
+                    chunk_metadata={"source_page": page_number},
+                )
             )
-            chunks.append(chunk)
 
-    # Bulk add and commit efficiently
-    db.add_all(chunks)
+    db.add_all(chunks_to_add)
     db.commit()
-
-    return chunks
+    return chunks_to_add

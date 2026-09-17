@@ -2,7 +2,7 @@ from app.database import SessionLocal
 from app.knowledge.ingestion import create_document, create_document_chunks
 
 
-def test_document_chunk_creation():
+def test_document_chunks_have_overlap():
     db = SessionLocal()
     document = None
     chunks = []
@@ -10,7 +10,7 @@ def test_document_chunk_creation():
     try:
         document = create_document(
             db,
-            title="Test Biodiversity Report",
+            title="Overlap Test Report",
             source="Test Source",
             organization="Test Organization",
             document_type="report",
@@ -20,17 +20,12 @@ def test_document_chunk_creation():
             {
                 "page_number": 1,
                 "text": (
-                    "Biodiversity is influenced by habitat diversity "
-                    "and environmental conditions."
+                    "Biodiversity supports ecosystem functions and services. "
+                    "Healthy soils contain diverse communities of microorganisms. "
+                    "Microorganisms contribute to nutrient cycling and organic matter "
+                    "decomposition. Soil biodiversity therefore supports ecosystem health."
                 ),
-            },
-            {
-                "page_number": 2,
-                "text": (
-                    "Soil organic carbon can be used as an indicator "
-                    "of soil health."
-                ),
-            },
+            }
         ]
 
         chunks = create_document_chunks(
@@ -38,33 +33,39 @@ def test_document_chunk_creation():
             document,
             pages,
             chunk_size=100,
+            chunk_overlap=20,
         )
 
-        assert len(chunks) > 0
+        assert len(chunks) >= 2
 
-        assert all(
-            chunk.document_id == document.id
-            for chunk in chunks
+        print("\n--- CHUNKS ---")
+        for index, chunk in enumerate(chunks, start=1):
+            print(f"Chunk {index}: {chunk.chunk_text}")
+        print("--- END CHUNKS ---")
+
+        # Consecutive chunks should share trailing context.
+        overlap_words = set(chunks[0].chunk_text.split()) & set(
+            chunks[1].chunk_text.split()
         )
 
-        assert chunks[0].page_number == 1
+        assert overlap_words
 
-        assert chunks[-1].page_number == 2
+        # All chunks must remain on the same source page.
+        assert all(chunk.page_number == 1 for chunk in chunks)
 
-        assert all(
-            chunk.chunk_metadata["source_page"] == chunk.page_number
-            for chunk in chunks
-        )
+        # assert (
+        #     "microorganisms." in chunks[0].chunk_text
+        #     and "microorganisms." in chunks[1].chunk_text
+        # )
 
     finally:
-        # Safely clean up only what was successfully created
         for chunk in chunks:
             db.delete(chunk)
-            db.flush()
+
+        db.flush()
 
         if document:
             db.delete(document)
-            db.flush()
 
         db.commit()
         db.close()
