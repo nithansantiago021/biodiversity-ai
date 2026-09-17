@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation as EnvironmentalObservationDB
 from app.models.schemas import EnvironmentalObservation
+from app.knowledge.synthesis import generate_grounded_recommendation
 
 
 app = FastAPI(
@@ -37,38 +38,37 @@ def health():
     }
 
 
-@app.post("/observations")
+@app.post("/observations", status_code=status.HTTP_201_CREATED)
 def create_observation(
     observation: EnvironmentalObservation,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
-    db_observation = EnvironmentalObservationDB(
-        latitude=observation.latitude,
-        longitude=observation.longitude,
-
-        soil_ph=observation.soil_ph,
-        soil_organic_carbon=observation.soil_organic_carbon,
-        soil_moisture=observation.soil_moisture,
-
-        land_use=observation.land_use,
-        land_cover=observation.land_cover,
-
-        species_richness=observation.species_richness,
-        habitat_diversity=observation.habitat_diversity,
-
-        temperature=observation.temperature,
-        rainfall=observation.rainfall,
-
-        pollution_index=observation.pollution_index,
-        deforestation_rate=observation.deforestation_rate
-    )
-
-    db.add(db_observation)
+    db_obs = EnvironmentalObservationDB(**observation.model_dump())
+    db.add(db_obs)
     db.commit()
-    db.refresh(db_observation)
+    db.refresh(db_obs)
+    return {"id": db_obs.id, "message": "Environmental observation created successfully"}
 
-    return {
-        "message": "Environmental observation stored successfully",
-        "id": db_observation.id
-    }
+
+@app.post("/observations/{observation_id}/recommendations")
+def get_recommendation_for_observation(
+    observation_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Triggers grounded scientific RAG synthesis for a stored EnvironmentalObservation ID.
+    """
+    # Fixed: Query the SQLAlchemy ORM model (EnvironmentalObservationDB), not the Pydantic schema
+    obs = (
+        db.query(EnvironmentalObservationDB)
+        .filter(EnvironmentalObservationDB.id == observation_id)
+        .first()
+    )
+    if not obs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Environmental observation with ID {observation_id} not found.",
+        )
+
+    recommendation_payload = generate_grounded_recommendation(db, obs)
+    return recommendation_payload
