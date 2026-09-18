@@ -75,3 +75,18 @@ def test_get_recommendation_endpoint_success(client):
     assert "ecological_summary" in data
     assert len(data["recommendations"]) > 0
     assert "citations" in data["recommendations"][0]
+
+def test_upload_csv_observations_success(client):
+    csv_content = (
+        "latitude,longitude,soil_ph,soil_organic_carbon,soil_moisture,land_use,land_cover,species_richness,habitat_diversity,temperature,rainfall,pollution_index,deforestation_rate\n"
+        "13.0827,80.2707,5.5,0.45,15.0,agriculture,cropland,12.0,0.35,29.0,900.0,0.2,0.05\n"
+        "12.9716,77.5946,6.2,0.80,20.0,forest,dense_forest,45.0,0.85,24.5,1200.0,0.1,0.01\n"
+    )
+
+    files = {"file": ("test_data.csv", csv_content, "text/csv")}
+    response = client.post("/observations/upload-csv", files=files)
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["record_count"] == 2
+    assert "Successfully ingested" in data["message"]

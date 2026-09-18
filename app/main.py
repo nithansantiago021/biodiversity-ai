@@ -1,5 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+import csv
+import io
 from sqlalchemy.orm import Session
+from typing import List, Optional, Any, Dict
 
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation as EnvironmentalObservationDB
@@ -155,3 +158,47 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
         data=rec_data,
         chat_history=history,
     )
+
+@app.post("/observations/upload-csv", status_code=status.HTTP_201_CREATED)
+def upload_csv_observations(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Batch ingests environmental observations from an uploaded CSV file.
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file format. Please upload a .csv file."
+        )
+
+    content = file.file.read().decode("utf-8")
+    csv_reader = csv.DictReader(io.StringIO(content))
+
+    created_records = []
+    for row in csv_reader:
+        obs_data = {
+            "latitude": float(row["latitude"]),
+            "longitude": float(row["longitude"]),
+            "soil_ph": float(row["soil_ph"]),
+            "soil_organic_carbon": float(row["soil_organic_carbon"]),
+            "soil_moisture": float(row["soil_moisture"]),
+            "land_use": str(row["land_use"]),
+            "land_cover": str(row["land_cover"]),
+            "species_richness": float(row["species_richness"]),
+            "habitat_diversity": float(row["habitat_diversity"]),
+            "temperature": float(row["temperature"]),
+            "rainfall": float(row["rainfall"]),
+            "pollution_index": float(row["pollution_index"]),
+            "deforestation_rate": float(row["deforestation_rate"]),
+        }
+        db_obs = EnvironmentalObservationDB(**obs_data)
+        db.add(db_obs)
+        created_records.append(db_obs)
+
+    db.commit()
+    return {
+        "message": f"Successfully ingested {len(created_records)} environmental observations.",
+        "record_count": len(created_records)
+    }
