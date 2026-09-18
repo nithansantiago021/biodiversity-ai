@@ -1,4 +1,14 @@
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, JSON, Text
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Date,
+    DateTime,
+    ForeignKey,
+    JSON,
+    Text,
+)
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.database import Base
@@ -30,6 +40,7 @@ class EnvironmentalObservation(Base):
     pollution_index = Column(Float, nullable=False)
     deforestation_rate = Column(Float, nullable=False)
 
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -50,11 +61,7 @@ class DocumentChunk(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    document_id = Column(
-        Integer,
-        ForeignKey("documents.id"),
-        nullable=False
-    )
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
 
     chunk_text = Column(String, nullable=False)
     page_number = Column(Integer, nullable=True)
@@ -67,7 +74,10 @@ class DocumentChunk(Base):
     # Relationship back to parent document
     document = relationship("Document", back_populates="chunks")
 
-Document.chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+
+Document.chunks = relationship(
+    "DocumentChunk", back_populates="document", cascade="all, delete-orphan"
+)
 
 
 class ChatMessage(Base):
@@ -77,4 +87,6 @@ class ChatMessage(Base):
     session_id = Column(String(100), index=True, nullable=False)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(ZoneInfo("Asia/Kolkata")))
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(ZoneInfo("Asia/Kolkata"))
+    )

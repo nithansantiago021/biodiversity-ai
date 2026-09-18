@@ -29,7 +29,6 @@ def main():
 
             config = {"configurable": {"thread_id": session_thread_id}}
 
-            
             input_payload = {
                 "user_query": user_input,
                 "user_prompt": user_input,

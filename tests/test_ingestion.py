@@ -62,4 +62,3 @@ def test_document_chunks_have_overlap_and_rich_metadata():
 
         db.commit()
         db.close()
-        

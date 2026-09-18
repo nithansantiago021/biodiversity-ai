@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 
-    
     # LLM & Model Parameters (used when GROQ_API_KEY is available)
     LLM_MODEL_NAME: str = "openai/gpt-oss-120b"
     LLM_TEMPERATURE: float = 0.1

@@ -2,7 +2,10 @@ from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation
 from app.knowledge.ingestion import create_document, create_document_chunks
 from app.knowledge.embeddings import generate_chunk_embeddings
-from app.knowledge.grounding import generate_observation_queries, analyze_observation_with_grounding
+from app.knowledge.grounding import (
+    generate_observation_queries,
+    analyze_observation_with_grounding,
+)
 
 
 def test_generate_observation_queries_triggers_correctly():
@@ -55,7 +58,9 @@ def test_analyze_observation_with_grounding_end_to_end():
             }
         ]
 
-        chunks = create_document_chunks(db, document, pages, chunk_size=200, chunk_overlap=50)
+        chunks = create_document_chunks(
+            db, document, pages, chunk_size=200, chunk_overlap=50
+        )
         generate_chunk_embeddings(db, chunks)
 
         obs = EnvironmentalObservation(

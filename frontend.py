@@ -6,7 +6,9 @@ st.set_page_config(page_title="Biodiversity AI Engine", page_icon="🌍")
 st.title("Biodiversity & Ecological Restoration AI Engine")
 
 # Backend live URL (will be updated once Render deploys)
-BACKEND_URL = st.sidebar.text_input("Backend API URL", value="https://biodiversity-ai-backend.onrender.com")
+BACKEND_URL = st.sidebar.text_input(
+    "Backend API URL", value="https://biodiversity-ai-backend.onrender.com"
+)
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = f"demo-{uuid.uuid4()}"
@@ -28,7 +30,9 @@ if user_input := st.chat_input("Ask about land metrics or restoration strategies
         try:
             res = requests.post(f"{BACKEND_URL}/chat", json=payload).json()
             bot_reply = res.get("content", "Error processing request.")
-            st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+            st.session_state.messages.append(
+                {"role": "assistant", "content": bot_reply}
+            )
             with st.chat_message("assistant"):
                 st.write(bot_reply)
         except Exception as e:

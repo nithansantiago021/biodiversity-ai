@@ -25,9 +25,13 @@ def generate_observation_queries(observation: EnvironmentalObservation) -> list[
     # 2. Soil pH
     if observation.soil_ph is not None:
         if observation.soil_ph < 5.5:
-            queries.append(f"Effects of acidic soil pH ({observation.soil_ph}) on biodiversity and nutrient availability.")
+            queries.append(
+                f"Effects of acidic soil pH ({observation.soil_ph}) on biodiversity and nutrient availability."
+            )
         elif observation.soil_ph > 8.0:
-            queries.append(f"Effects of alkaline soil pH ({observation.soil_ph}) on soil biological activity.")
+            queries.append(
+                f"Effects of alkaline soil pH ({observation.soil_ph}) on soil biological activity."
+            )
 
     # 3. Soil Moisture
     if observation.soil_moisture is not None and observation.soil_moisture < 15.0:
@@ -36,8 +40,13 @@ def generate_observation_queries(observation: EnvironmentalObservation) -> list[
         )
 
     # 4. Biodiversity Metrics (Species Richness & Habitat Diversity)
-    species_low = observation.species_richness is not None and observation.species_richness < 10.0
-    habitat_low = observation.habitat_diversity is not None and observation.habitat_diversity < 0.3
+    species_low = (
+        observation.species_richness is not None and observation.species_richness < 10.0
+    )
+    habitat_low = (
+        observation.habitat_diversity is not None
+        and observation.habitat_diversity < 0.3
+    )
     if species_low or habitat_low:
         queries.append(
             f"Drivers of low species richness ({observation.species_richness}) and low habitat diversity ({observation.habitat_diversity}) in {observation.land_cover or 'land cover'}."
@@ -64,7 +73,10 @@ def generate_observation_queries(observation: EnvironmentalObservation) -> list[
             f"Ecotoxicological effects of soil pollution index ({observation.pollution_index}) on soil fauna and biological functioning."
         )
 
-    if observation.deforestation_rate is not None and observation.deforestation_rate > 0.05:
+    if (
+        observation.deforestation_rate is not None
+        and observation.deforestation_rate > 0.05
+    ):
         queries.append(
             f"Consequences of high deforestation rate ({observation.deforestation_rate}) on species richness and habitat fragmentation."
         )
@@ -91,7 +103,9 @@ def analyze_observation_with_grounding(
     evidence_items = []
 
     for query in generated_queries:
-        retrieved_chunks = search_similar_chunks(db, query_text=query, top_k=top_k_per_query)
+        retrieved_chunks = search_similar_chunks(
+            db, query_text=query, top_k=top_k_per_query
+        )
         for item in retrieved_chunks:
             evidence_items.append(
                 {
@@ -106,7 +120,10 @@ def analyze_observation_with_grounding(
 
     return {
         "observation_id": observation.id,
-        "location": {"latitude": observation.latitude, "longitude": observation.longitude},
+        "location": {
+            "latitude": observation.latitude,
+            "longitude": observation.longitude,
+        },
         "metrics": {
             "soil_ph": observation.soil_ph,
             "soil_organic_carbon": observation.soil_organic_carbon,

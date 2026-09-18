@@ -42,7 +42,9 @@ def generate_grounded_recommendation(
     Ollama model automatically (see app/llm.py::get_chat_llm).
     """
     # 1. Retrieve grounded evidence & provenance from vector store
-    grounded_payload = analyze_observation_with_grounding(db, observation, top_k_per_query=1)
+    grounded_payload = analyze_observation_with_grounding(
+        db, observation, top_k_per_query=1
+    )
 
     # 2. Format retrieved evidence blocks for prompt context
     evidence_text_blocks = []
@@ -59,7 +61,11 @@ def generate_grounded_recommendation(
         )
         evidence_text_blocks.append(block)
 
-    evidence_context = "\n".join(evidence_text_blocks) if evidence_text_blocks else "No specific document chunks retrieved."
+    evidence_context = (
+        "\n".join(evidence_text_blocks)
+        if evidence_text_blocks
+        else "No specific document chunks retrieved."
+    )
     metrics_context = str(grounded_payload.get("metrics", {}))
 
     # 3. LLM Setup -- Groq if GROQ_API_KEY is present, else local Ollama fallback.
@@ -68,18 +74,22 @@ def generate_grounded_recommendation(
     # 4. Enforce Pydantic Structured Output
     structured_llm = llm.with_structured_output(GroundedRecommendationResponse)
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        ("human", HUMAN_PROMPT),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_PROMPT),
+            ("human", HUMAN_PROMPT),
+        ]
+    )
 
     chain = prompt | structured_llm
 
     # 5. Invoke Chain
-    result = chain.invoke({
-        "metrics": metrics_context,
-        "evidence": evidence_context,
-    })
+    result = chain.invoke(
+        {
+            "metrics": metrics_context,
+            "evidence": evidence_context,
+        }
+    )
 
     # 6. Normalize output dictionary and preserve observation_id
     if isinstance(result, GroundedRecommendationResponse):

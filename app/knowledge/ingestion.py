@@ -82,9 +82,7 @@ def create_document_chunks(
 ) -> list[DocumentChunk]:
     """Creates document chunks respecting sentence boundaries and persists them to DB."""
     existing_chunks = (
-        db.query(DocumentChunk)
-        .filter(DocumentChunk.document_id == document.id)
-        .all()
+        db.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).all()
     )
     if existing_chunks:
         return existing_chunks
@@ -127,7 +125,10 @@ def create_document_chunks(
                 overlap_sentences = []
                 overlap_length = 0
                 for s in reversed(current_chunk_sentences):
-                    if overlap_length + len(s) + 1 <= chunk_overlap or not overlap_sentences:
+                    if (
+                        overlap_length + len(s) + 1 <= chunk_overlap
+                        or not overlap_sentences
+                    ):
                         overlap_sentences.insert(0, s)
                         overlap_length += len(s) + 1
                     else:
@@ -161,9 +162,7 @@ def create_document_chunks(
     db.commit()
 
     return (
-        db.query(DocumentChunk)
-        .filter(DocumentChunk.document_id == document.id)
-        .all()
+        db.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).all()
     )
 
 
@@ -174,8 +173,7 @@ def run_ingestion_pipeline(db: Session, raw_data_dir: str = "data/raw_data"):
         return
 
     supported_files = [
-        f for f in data_path.iterdir() 
-        if f.suffix.lower() in [".pdf", ".txt", ".md"]
+        f for f in data_path.iterdir() if f.suffix.lower() in [".pdf", ".txt", ".md"]
     ]
 
     for file_path in supported_files:
