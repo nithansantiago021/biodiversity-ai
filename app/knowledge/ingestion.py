@@ -2,40 +2,38 @@ import re
 from pathlib import Path
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
+
 from app.models.db_models import Document, DocumentChunk
+from app.knowledge.embeddings import generate_chunk_embeddings
 
 
-def extract_pdf_pages(pdf_path: str) -> list[dict]:
-    """
-    Extract text from a PDF while preserving page boundaries.
-    Returns a list of dictionaries containing page number and page text.
-    """
-    path = Path(pdf_path)
+def extract_document_pages(file_path: str) -> list[dict]:
+    """Extract text from PDF, TXT, or MD files while preserving page/section structure."""
+    path = Path(file_path)
 
     if not path.exists():
-        raise FileNotFoundError(f"PDF not found: {pdf_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
 
-    if path.suffix.lower() != ".pdf":
-        raise ValueError(f"Expected a PDF file: {pdf_path}")
+    ext = path.suffix.lower()
 
-    reader = PdfReader(str(path))
-    pages = []
+    if ext == ".pdf":
+        reader = PdfReader(str(path))
+        pages = []
+        for page_number, page in enumerate(reader.pages, start=1):
+            text = (page.extract_text() or "").strip()
+            if text:
+                pages.append({"page_number": page_number, "text": text})
+        return pages
 
-    for page_number, page in enumerate(reader.pages, start=1):
-        text = page.extract_text() or ""
-        text = text.strip()
+    elif ext in [".txt", ".md"]:
+        content = path.read_text(encoding="utf-8").strip()
+        if not content:
+            return []
+        # Treat entire text/markdown file as page 1
+        return [{"page_number": 1, "text": content}]
 
-        if not text:
-            continue
-
-        pages.append(
-            {
-                "page_number": page_number,
-                "text": text,
-            }
-        )
-
-    return pages
+    else:
+        raise ValueError(f"Unsupported file format: {ext}. Allowed: .pdf, .txt, .md")
 
 
 def create_document(
@@ -48,9 +46,11 @@ def create_document(
     url: str | None = None,
     document_type: str = "report",
 ) -> Document:
-    """
-    Create and persist a Document record.
-    """
+    """Create and persist a Document record if it doesn't already exist."""
+    existing_doc = db.query(Document).filter(Document.title == title).first()
+    if existing_doc:
+        return existing_doc
+
     document = Document(
         title=title,
         source=source,
@@ -59,11 +59,9 @@ def create_document(
         url=url,
         document_type=document_type,
     )
-
     db.add(document)
     db.commit()
     db.refresh(document)
-
     return document
 
 
@@ -82,11 +80,15 @@ def create_document_chunks(
     chunk_size: int = 1000,
     chunk_overlap: int = 200,
 ) -> list[DocumentChunk]:
-    """
-    Creates document chunks from page text, respecting natural sentence boundaries
-    and maintaining controlled overlap, while enriching chunk metadata with document
-    provenance and sequential ordering.
-    """
+    """Creates document chunks respecting sentence boundaries and persists them to DB."""
+    existing_chunks = (
+        db.query(DocumentChunk)
+        .filter(DocumentChunk.document_id == document.id)
+        .all()
+    )
+    if existing_chunks:
+        return existing_chunks
+
     chunks_to_add = []
     chunk_index = 0
 
@@ -98,12 +100,11 @@ def create_document_chunks(
             continue
 
         sentences = split_into_sentences(page_text)
-
         current_chunk_sentences = []
         current_length = 0
 
         for sentence in sentences:
-            sentence_len = len(sentence) + 1  # +1 for space
+            sentence_len = len(sentence) + 1
 
             if current_length + sentence_len > chunk_size and current_chunk_sentences:
                 chunk_text = " ".join(current_chunk_sentences)
@@ -123,7 +124,6 @@ def create_document_chunks(
                 )
                 chunk_index += 1
 
-                # Overlap logic
                 overlap_sentences = []
                 overlap_length = 0
                 for s in reversed(current_chunk_sentences):
@@ -139,7 +139,6 @@ def create_document_chunks(
             current_chunk_sentences.append(sentence)
             current_length += sentence_len
 
-        # Finalize remaining sentences on page
         if current_chunk_sentences:
             chunk_text = " ".join(current_chunk_sentences)
             chunks_to_add.append(
@@ -160,4 +159,33 @@ def create_document_chunks(
 
     db.add_all(chunks_to_add)
     db.commit()
-    return chunks_to_add
+
+    return (
+        db.query(DocumentChunk)
+        .filter(DocumentChunk.document_id == document.id)
+        .all()
+    )
+
+
+def run_ingestion_pipeline(db: Session, raw_data_dir: str = "data/raw_data"):
+    """Scans data/raw_data directory, ingests all files, and computes embeddings."""
+    data_path = Path(raw_data_dir)
+    if not data_path.exists():
+        return
+
+    supported_files = [
+        f for f in data_path.iterdir() 
+        if f.suffix.lower() in [".pdf", ".txt", ".md"]
+    ]
+
+    for file_path in supported_files:
+        pages = extract_document_pages(str(file_path))
+        doc = create_document(
+            db,
+            title=file_path.stem.replace("_", " ").title(),
+            source=file_path.name,
+            organization="Environmental Research Institute",
+            document_type="report" if file_path.suffix == ".pdf" else "notes",
+        )
+        chunks = create_document_chunks(db, doc, pages)
+        generate_chunk_embeddings(db, chunks)

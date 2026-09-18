@@ -9,16 +9,16 @@ __pycache__/
 
 # Pytest
 .pytest_cache/
-pytest.ini
 
 # Environment variables
 .env
 
-# IDE
+# IDE & OS
 .vscode/
-
-# OS
+.idea/
 .DS_Store
 
-# Raw source documents / large files
-data/raw_data/
+# Local database storage
+postgres_data/
+*.db
+*.sqlite3
