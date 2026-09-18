@@ -53,7 +53,10 @@ def test_search_similar_chunks_returns_ranked_provenance():
 
         # Verify rich provenance structure
         assert top_result["provenance"]["document_title"] == "Soil Biology Handbook"
-        assert top_result["provenance"]["organization"] == "Food and Agriculture Organization"
+        assert (
+            top_result["provenance"]["organization"]
+            == "Food and Agriculture Organization"
+        )
         assert "rerank_score" in top_result
         assert isinstance(top_result["rerank_score"], float)
 

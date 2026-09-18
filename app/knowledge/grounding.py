@@ -22,9 +22,13 @@ def generate_observation_queries(observation: EnvironmentalObservation) -> list[
 
     # 2. Soil pH
     if observation.soil_ph < 5.5:
-        queries.append(f"Effects of acidic soil pH ({observation.soil_ph}) on biodiversity and nutrient availability.")
+        queries.append(
+            f"Effects of acidic soil pH ({observation.soil_ph}) on biodiversity and nutrient availability."
+        )
     elif observation.soil_ph > 8.0:
-        queries.append(f"Effects of alkaline soil pH ({observation.soil_ph}) on soil biological activity.")
+        queries.append(
+            f"Effects of alkaline soil pH ({observation.soil_ph}) on soil biological activity."
+        )
 
     # 3. Soil Moisture
     if observation.soil_moisture < 15.0:
@@ -81,7 +85,9 @@ def analyze_observation_with_grounding(
     evidence_items = []
 
     for query in generated_queries:
-        retrieved_chunks = search_similar_chunks(db, query_text=query, top_k=top_k_per_query)
+        retrieved_chunks = search_similar_chunks(
+            db, query_text=query, top_k=top_k_per_query
+        )
         for item in retrieved_chunks:
             evidence_items.append(
                 {
@@ -96,7 +102,10 @@ def analyze_observation_with_grounding(
 
     return {
         "observation_id": observation.id,
-        "location": {"latitude": observation.latitude, "longitude": observation.longitude},
+        "location": {
+            "latitude": observation.latitude,
+            "longitude": observation.longitude,
+        },
         "metrics": {
             "soil_ph": observation.soil_ph,
             "soil_organic_carbon": observation.soil_organic_carbon,

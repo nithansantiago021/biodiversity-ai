@@ -7,7 +7,11 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from app.models.db_models import EnvironmentalObservation
 from app.knowledge.grounding import analyze_observation_with_grounding
-from app.models.schemas import GroundedRecommendationResponse, ActionableRecommendation, CitationSchema
+from app.models.schemas import (
+    GroundedRecommendationResponse,
+    ActionableRecommendation,
+    CitationSchema,
+)
 from app.config import settings
 
 load_dotenv()
@@ -44,7 +48,9 @@ def generate_grounded_recommendation(
         raise ValueError("GROQ_API_KEY is missing. Please set it in your .env file.")
 
     # 1. Retrieve grounded evidence & provenance
-    grounded_payload = analyze_observation_with_grounding(db, observation, top_k_per_query=1)
+    grounded_payload = analyze_observation_with_grounding(
+        db, observation, top_k_per_query=1
+    )
 
     # 2. Format evidence for prompt context
     evidence_text_blocks = []
@@ -68,17 +74,21 @@ def generate_grounded_recommendation(
 
     structured_llm = llm.with_structured_output(GroundedRecommendationResponse)
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        ("human", HUMAN_PROMPT),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_PROMPT),
+            ("human", HUMAN_PROMPT),
+        ]
+    )
 
     chain = prompt | structured_llm
 
-    result: GroundedRecommendationResponse = chain.invoke({
-        "metrics": metrics_context,
-        "evidence": evidence_context,
-    })
+    result: GroundedRecommendationResponse = chain.invoke(
+        {
+            "metrics": metrics_context,
+            "evidence": evidence_context,
+        }
+    )
 
     result.observation_id = observation.id
     return result.model_dump()

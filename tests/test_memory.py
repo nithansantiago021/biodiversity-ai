@@ -10,7 +10,9 @@ def test_chat_memory_save_and_retrieve():
 
     try:
         # Save multi-turn conversation
-        save_chat_message(db, session_id, "user", "Biodiversity is declining on my land.")
+        save_chat_message(
+            db, session_id, "user", "Biodiversity is declining on my land."
+        )
         save_chat_message(
             db,
             session_id,
@@ -32,7 +34,10 @@ def test_chat_memory_save_and_retrieve():
         assert history[0]["content"] == "Biodiversity is declining on my land."
         assert history[1]["role"] == "assistant"
         assert history[2]["role"] == "user"
-        assert history[2]["content"] == "Soil carbon is 0.3%, rainfall is 850mm, and land use is agriculture."
+        assert (
+            history[2]["content"]
+            == "Soil carbon is 0.3%, rainfall is 850mm, and land use is agriculture."
+        )
 
     finally:
         db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()

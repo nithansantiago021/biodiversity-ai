@@ -6,6 +6,7 @@ from app.knowledge.embeddings import generate_embedding
 # Lazy-load Cross-Encoder reranker
 _reranker = None
 
+
 def get_reranker() -> CrossEncoder:
     global _reranker
     if _reranker is None:
@@ -42,7 +43,7 @@ def search_similar_chunks(
     # Prepare (Query, Chunk_Text) pairs for Cross-Encoder
     reranker = get_reranker()
     pairs = [[query_text, chunk.chunk_text] for chunk, _ in candidates]
-    
+
     # STAGE 2: Deep joint-attention reranking
     rerank_scores = reranker.predict(pairs)
 
@@ -58,7 +59,9 @@ def search_similar_chunks(
                 "vector_distance": round(float(distance), 4),
                 "provenance": {
                     "document_title": chunk.document.title if chunk.document else None,
-                    "organization": chunk.document.organization if chunk.document else None,
+                    "organization": (
+                        chunk.document.organization if chunk.document else None
+                    ),
                     "source": chunk.document.source if chunk.document else None,
                     "chunk_metadata": chunk.chunk_metadata,
                 },

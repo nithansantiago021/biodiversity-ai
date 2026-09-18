@@ -41,7 +41,15 @@ def evaluate_input_node(state: BiodiversityAgentState) -> Dict[str, Any]:
         return {"needs_clarification": False}
 
     # If pure text query, check for metric indicators
-    essential_keywords = ["carbon", "ph", "rainfall", "moisture", "temperature", "nitrogen", "soil"]
+    essential_keywords = [
+        "carbon",
+        "ph",
+        "rainfall",
+        "moisture",
+        "temperature",
+        "nitrogen",
+        "soil",
+    ]
     has_metric_mention = any(kw in query for kw in essential_keywords)
 
     if not has_metric_mention and not obs:
@@ -109,7 +117,9 @@ def validate_provenance_node(state: BiodiversityAgentState) -> Dict[str, Any]:
         for citation in rec.get("citations", []):
             cited_id = citation.get("chunk_id")
             if cited_id not in evidence_chunk_ids:
-                errors.append(f"Invalid citation: chunk_id {cited_id} not present in retrieved evidence.")
+                errors.append(
+                    f"Invalid citation: chunk_id {cited_id} not present in retrieved evidence."
+                )
 
     validation_passed = len(errors) == 0
     return {"validation_passed": validation_passed, "errors": errors}

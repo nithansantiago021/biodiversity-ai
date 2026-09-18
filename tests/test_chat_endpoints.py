@@ -18,7 +18,11 @@ def test_chat_endpoint_triggers_clarification_on_vague_input():
 
     assert data["session_id"] == session_id
     assert data["response_type"] == "clarification"
-    assert "Soil Organic Carbon" in data["content"] or "pH" in data["content"] or "rainfall" in data["content"]
+    assert (
+        "Soil Organic Carbon" in data["content"]
+        or "pH" in data["content"]
+        or "rainfall" in data["content"]
+    )
     assert len(data["chat_history"]) == 2
 
 

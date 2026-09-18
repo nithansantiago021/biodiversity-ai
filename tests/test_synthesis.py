@@ -28,7 +28,9 @@ def test_generate_grounded_recommendation_returns_structured_output():
             }
         ]
 
-        chunks = create_document_chunks(db, document, pages, chunk_size=200, chunk_overlap=50)
+        chunks = create_document_chunks(
+            db, document, pages, chunk_size=200, chunk_overlap=50
+        )
         generate_chunk_embeddings(db, chunks)
 
         # Create test observation

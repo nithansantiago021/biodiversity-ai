@@ -19,7 +19,7 @@ def test_valid_environmental_observation():
         temperature=29.0,
         rainfall=720.0,
         pollution_index=0.2,
-        deforestation_rate=0.01
+        deforestation_rate=0.01,
     )
 
     assert observation.soil_ph == 6.8
@@ -42,8 +42,9 @@ def test_invalid_soil_ph():
             temperature=29.0,
             rainfall=720.0,
             pollution_index=0.2,
-            deforestation_rate=0.01
+            deforestation_rate=0.01,
         )
+
 
 def test_get_recommendation_endpoint_success(client):
     # 1. Post a valid observation
@@ -75,6 +76,7 @@ def test_get_recommendation_endpoint_success(client):
     assert "ecological_summary" in data
     assert len(data["recommendations"]) > 0
     assert "citations" in data["recommendations"][0]
+
 
 def test_upload_csv_observations_success(client):
     csv_content = (

@@ -3,6 +3,7 @@ from datetime import date
 from app.database import SessionLocal
 from app.models.db_models import Document, DocumentChunk
 
+
 def test_document_chunk_provenance():
     db = SessionLocal()
 
@@ -13,7 +14,7 @@ def test_document_chunk_provenance():
             organization="Food and Agriculture Organization",
             publication_date=date(2021, 1, 1),
             url="https://example.com/fao-soil-carbon",
-            document_type="report"
+            document_type="report",
         )
 
         db.add(document)
@@ -27,19 +28,16 @@ def test_document_chunk_provenance():
                 "of soil health and ecosystem function."
             ),
             page_number=10,
-            chunk_metadata={
-                "topic": "soil_health",
-                "indicator": "soil_organic_carbon"
-            }
+            chunk_metadata={"topic": "soil_health", "indicator": "soil_organic_carbon"},
         )
 
         db.add(chunk)
         db.commit()
         db.refresh(chunk)
 
-        stored_chunk = db.query(DocumentChunk).filter(
-            DocumentChunk.id == chunk.id
-        ).first()
+        stored_chunk = (
+            db.query(DocumentChunk).filter(DocumentChunk.id == chunk.id).first()
+        )
 
         assert stored_chunk is not None
         assert stored_chunk.document_id == document.id
