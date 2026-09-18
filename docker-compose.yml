@@ -1,19 +1,39 @@
+version: '3.8'
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: biodiversity-postgres
     restart: unless-stopped
-
     environment:
       POSTGRES_DB: biodiversity
       POSTGRES_USER: biodiversity_user
       POSTGRES_PASSWORD: biodiversity_password
-
     ports:
       - "5433:5432"
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biodiversity_user -d biodiversity"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    container_name: biodiversity-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://biodiversity_user:biodiversity_password@postgres:5432/biodiversity
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:
