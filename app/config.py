@@ -9,9 +9,15 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     
-    # LLM & Model Parameters
+    # LLM & Model Parameters (used when GROQ_API_KEY is available)
     LLM_MODEL_NAME: str = "openai/gpt-oss-120b"
     LLM_TEMPERATURE: float = 0.1
+
+    # Local fallback LLM (used automatically when GROQ_API_KEY is NOT set --
+    # see app/llm.py::get_chat_llm). Requires a local Ollama server running
+    # with the model pulled: `ollama pull qwen3:8b`.
+    OLLAMA_MODEL_NAME: str = "qwen3:8b"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
 
     # Embedding & Retrieval Parameters
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"

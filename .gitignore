@@ -22,3 +22,5 @@ __pycache__/
 postgres_data/
 *.db
 *.sqlite3
+
+.langgraph_api

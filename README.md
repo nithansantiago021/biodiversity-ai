@@ -52,21 +52,53 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-
-### Start Infrastructure (Docker):
-
+## Create and Activate Virtual Environment:
 ```Bash
-docker compose up -d
-```
-### Run Migrations & Ingestion:
-
-```Bash
-python -c "from app.database import engine, Base; Base.metadata.create_all(bind=engine)"
-python -c "from app.database import SessionLocal; from app.knowledge.ingestion import run_ingestion_pipeline; db = SessionLocal(); run_ingestion_pipeline(db); db.close()"
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-### Run Server:
-
+### Install Dependencies:
 ```Bash
-uvicorn app.main:app --reload
+pip install -r requirements.txt
 ```
+
+### Configure Environment Variables (.env):
+```bash
+# Code snippet
+DATABASE_URL=postgresql://user:password@localhost:5432/biodiversity_db
+GROQ_API_KEY=gsk_your_groq_api_key_here
+LLM_MODEL_NAME=llama-3.3-70b-versatile
+LLM_TEMPERATURE=0.1
+HF_HUB_OFFLINE=1
+```
+
+### Run Database Migrations & Ingest Documents:
+```bash
+python -m app.database.init_db
+python -m app.knowledge.ingest
+```
+
+### Execute Unit Test Suite:
+```Bash
+pytest -q
+```
+
+### Launch Interactive CLI:
+```Bash
+python cli.py
+```
+
+## Recommended Test Queries for Review
+
+Direct Parameter Query:
+
+        "For agricultural land with a soil pH of 5.2, soil organic carbon at 0.8%, and seasonal heavy rainfall, what are the primary indicators for soil biodiversity degradation and how can we mitigate it?"
+
+Standard Water Query:
+
+        "What is the safe TDS level for drinking water according to BIS 10500 standards?"
+
+Clarification Trigger Query:
+
+        "How do I improve my farm's soil quality?"

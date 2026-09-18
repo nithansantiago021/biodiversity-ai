@@ -4,6 +4,8 @@ import io
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict
 
+from langchain_core.messages import HumanMessage
+
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation as EnvironmentalObservationDB
 from app.models.schemas import EnvironmentalObservation, ChatRequest, ChatResponse
@@ -86,7 +88,9 @@ def get_recommendation_for_observation(
         "errors": [],
     }
 
-    final_state = biodiversity_agent.invoke(initial_state)
+    # Standalone one-off request -- not part of a conversational thread.
+    config = {"configurable": {"thread_id": f"observation-{observation_id}"}}
+    final_state = biodiversity_agent.invoke(initial_state, config=config)
 
     if not final_state["validation_passed"]:
         raise HTTPException(
@@ -101,7 +105,7 @@ def get_recommendation_for_observation(
 
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
-    # 1. Save incoming user message
+    # 1. Save incoming user message (durable audit trail in Postgres)
     save_chat_message(db, payload.session_id, "user", payload.message)
 
     # 2. If an inline observation payload was sent, persist it to DB so it acquires an .id
@@ -112,11 +116,12 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
         db.commit()
         db.refresh(db_obs)
 
-    # 3. Construct initial Agent state payload with DB instance
+    # 3. Construct the turn's input state. 
     initial_state = {
         "observation_id": db_obs.id if db_obs else None,
         "observation": db_obs,
         "user_query": payload.message,
+        "messages": [HumanMessage(content=payload.message)],
         "db": db,
         "needs_clarification": False,
         "clarification_question": None,
@@ -127,8 +132,9 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
         "errors": [],
     }
 
-    # 4. Invoke LangGraph agent execution graph
-    final_state = biodiversity_agent.invoke(initial_state)
+    # 4. Invoke LangGraph agent execution graph, scoped to this session's thread
+    config = {"configurable": {"thread_id": payload.session_id}}
+    final_state = biodiversity_agent.invoke(initial_state, config=config)
 
     # 5. Handle Clarification vs Recommendation execution branches
     if final_state.get("needs_clarification"):
@@ -147,7 +153,7 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
         )
 
     rec_data = final_state.get("recommendation_response", {})
-    summary = rec_data.get("ecological_summary", "Grounded recommendation generated successfully.")
+    summary = rec_data.get("ecological_summary") or final_state.get("final_response") or "Grounded recommendation generated successfully."
     save_chat_message(db, payload.session_id, "assistant", summary)
     history = get_chat_history(db, payload.session_id)
 

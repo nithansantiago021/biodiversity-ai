@@ -7,54 +7,64 @@ def generate_observation_queries(observation: EnvironmentalObservation) -> list[
     """
     Translates structured environmental metrics into targeted scientific search queries
     covering soil chemistry, land management, biodiversity, climate stress, and human impact.
+    Safely handles None values for optional/unpopulated observation fields.
     """
     queries = []
 
     # 1. Soil Organic Carbon (SOC)
-    if observation.soil_organic_carbon < 1.0:
-        queries.append(
-            f"Impacts and risks of low soil organic carbon ({observation.soil_organic_carbon}%) in {observation.land_use} land use."
-        )
-    elif observation.soil_organic_carbon > 3.0:
-        queries.append(
-            f"Benefits of high soil organic carbon ({observation.soil_organic_carbon}%) for soil health and carbon sequestration."
-        )
+    if observation.soil_organic_carbon is not None:
+        if observation.soil_organic_carbon < 1.0:
+            queries.append(
+                f"Impacts and risks of low soil organic carbon ({observation.soil_organic_carbon}%) in {observation.land_use or 'general'} land use."
+            )
+        elif observation.soil_organic_carbon > 3.0:
+            queries.append(
+                f"Benefits of high soil organic carbon ({observation.soil_organic_carbon}%) for soil health and carbon sequestration."
+            )
 
     # 2. Soil pH
-    if observation.soil_ph < 5.5:
-        queries.append(f"Effects of acidic soil pH ({observation.soil_ph}) on biodiversity and nutrient availability.")
-    elif observation.soil_ph > 8.0:
-        queries.append(f"Effects of alkaline soil pH ({observation.soil_ph}) on soil biological activity.")
+    if observation.soil_ph is not None:
+        if observation.soil_ph < 5.5:
+            queries.append(f"Effects of acidic soil pH ({observation.soil_ph}) on biodiversity and nutrient availability.")
+        elif observation.soil_ph > 8.0:
+            queries.append(f"Effects of alkaline soil pH ({observation.soil_ph}) on soil biological activity.")
 
     # 3. Soil Moisture
-    if observation.soil_moisture < 15.0:
+    if observation.soil_moisture is not None and observation.soil_moisture < 15.0:
         queries.append(
             f"Impact of low soil moisture ({observation.soil_moisture}%) and drought stress on soil organisms."
         )
 
     # 4. Biodiversity Metrics (Species Richness & Habitat Diversity)
-    if observation.species_richness < 10.0 or observation.habitat_diversity < 0.3:
+    species_low = observation.species_richness is not None and observation.species_richness < 10.0
+    habitat_low = observation.habitat_diversity is not None and observation.habitat_diversity < 0.3
+    if species_low or habitat_low:
         queries.append(
-            f"Drivers of low species richness ({observation.species_richness}) and low habitat diversity ({observation.habitat_diversity}) in {observation.land_cover}."
+            f"Drivers of low species richness ({observation.species_richness}) and low habitat diversity ({observation.habitat_diversity}) in {observation.land_cover or 'land cover'}."
         )
 
     # 5. Climate Stress (Temperature & Rainfall)
-    if observation.temperature > 32.0 and observation.rainfall < 500.0:
-        queries.append(
-            f"Combined effect of high temperature ({observation.temperature}°C) and low rainfall ({observation.rainfall}mm) on soil ecosystem functions."
-        )
-    elif observation.rainfall < 400.0:
+    if observation.temperature is not None and observation.rainfall is not None:
+        if observation.temperature > 32.0 and observation.rainfall < 500.0:
+            queries.append(
+                f"Combined effect of high temperature ({observation.temperature}°C) and low rainfall ({observation.rainfall}mm) on soil ecosystem functions."
+            )
+        elif observation.rainfall < 400.0:
+            queries.append(
+                f"Effects of low annual precipitation ({observation.rainfall}mm) on soil biodiversity and microbial activity."
+            )
+    elif observation.rainfall is not None and observation.rainfall < 400.0:
         queries.append(
             f"Effects of low annual precipitation ({observation.rainfall}mm) on soil biodiversity and microbial activity."
         )
 
     # 6. Human Impact (Pollution Index & Deforestation Rate)
-    if observation.pollution_index > 0.3:
+    if observation.pollution_index is not None and observation.pollution_index > 0.3:
         queries.append(
             f"Ecotoxicological effects of soil pollution index ({observation.pollution_index}) on soil fauna and biological functioning."
         )
 
-    if observation.deforestation_rate > 0.05:
+    if observation.deforestation_rate is not None and observation.deforestation_rate > 0.05:
         queries.append(
             f"Consequences of high deforestation rate ({observation.deforestation_rate}) on species richness and habitat fragmentation."
         )
@@ -62,7 +72,7 @@ def generate_observation_queries(observation: EnvironmentalObservation) -> list[
     # 7. Fallback Query
     if not queries:
         queries.append(
-            f"Soil biodiversity and ecosystem function in {observation.land_use} with {observation.land_cover} cover."
+            f"Soil biodiversity and ecosystem function in {observation.land_use or 'agricultural'} with {observation.land_cover or 'cropland'} cover."
         )
 
     return queries
