@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Dict, Any
+from typing import TypedDict, List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from langgraph.graph import StateGraph, END
 
@@ -10,9 +10,12 @@ from app.knowledge.synthesis import generate_grounded_recommendation
 
 # 1. State Schema Definition
 class BiodiversityAgentState(TypedDict):
-    observation_id: int
-    observation: EnvironmentalObservation
+    observation_id: Optional[int]
+    observation: Optional[EnvironmentalObservation]
+    user_query: Optional[str]
     db: Session
+    needs_clarification: bool
+    clarification_question: Optional[str]
     generated_queries: List[str]
     scientific_evidence: List[Dict[str, Any]]
     recommendation_response: Dict[str, Any]
@@ -21,6 +24,43 @@ class BiodiversityAgentState(TypedDict):
 
 
 # 2. Node Functions
+def evaluate_input_node(state: BiodiversityAgentState) -> Dict[str, Any]:
+    """
+    Node 0: Gatekeeper node. Checks if structured observation or text query has essential metrics.
+    If missing key metrics, routes to clarification.
+    """
+    obs = state.get("observation")
+    query = (state.get("user_query") or "").lower()
+
+    # If structured observation with at least one critical threshold is present
+    if obs and (
+        obs.soil_organic_carbon is not None
+        or obs.soil_ph is not None
+        or obs.rainfall is not None
+    ):
+        return {"needs_clarification": False}
+
+    # If pure text query, check for metric indicators
+    essential_keywords = ["carbon", "ph", "rainfall", "moisture", "temperature", "nitrogen", "soil"]
+    has_metric_mention = any(kw in query for kw in essential_keywords)
+
+    if not has_metric_mention and not obs:
+        return {
+            "needs_clarification": True,
+            "clarification_question": (
+                "Can you provide soil organic carbon %, rainfall pattern, soil pH, or land use type "
+                "so I can generate a scientifically grounded recommendation?"
+            ),
+        }
+
+    return {"needs_clarification": False}
+
+
+def ask_clarification_node(state: BiodiversityAgentState) -> Dict[str, Any]:
+    """Node A: Returns the clarifying question payload when inputs are vague."""
+    return {}
+
+
 def ground_metrics_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     """Node 1: Evaluates environmental metrics and generates targeted search queries."""
     obs = state["observation"]
@@ -63,7 +103,7 @@ def validate_provenance_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     """Node 4: Agent self-validation checking that all cited chunk_ids match retrieved evidence."""
     evidence_chunk_ids = {item["chunk_id"] for item in state["scientific_evidence"]}
     rec_response = state["recommendation_response"]
-    
+
     errors = []
     for rec in rec_response.get("recommendations", []):
         for citation in rec.get("citations", []):
@@ -75,16 +115,36 @@ def validate_provenance_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     return {"validation_passed": validation_passed, "errors": errors}
 
 
-# 3. Graph Assembly
+# 3. Routing Logic
+def route_input(state: BiodiversityAgentState) -> str:
+    if state.get("needs_clarification"):
+        return "ask_clarification"
+    return "ground_metrics"
+
+
+# 4. Graph Assembly
 def build_biodiversity_agent():
     workflow = StateGraph(BiodiversityAgentState)
 
+    workflow.add_node("evaluate_input", evaluate_input_node)
+    workflow.add_node("ask_clarification", ask_clarification_node)
     workflow.add_node("ground_metrics", ground_metrics_node)
     workflow.add_node("retrieve_evidence", retrieve_evidence_node)
     workflow.add_node("synthesize_recommendation", synthesize_recommendation_node)
     workflow.add_node("validate_provenance", validate_provenance_node)
 
-    workflow.set_entry_point("ground_metrics")
+    workflow.set_entry_point("evaluate_input")
+
+    workflow.add_conditional_edges(
+        "evaluate_input",
+        route_input,
+        {
+            "ask_clarification": "ask_clarification",
+            "ground_metrics": "ground_metrics",
+        },
+    )
+
+    workflow.add_edge("ask_clarification", END)
     workflow.add_edge("ground_metrics", "retrieve_evidence")
     workflow.add_edge("retrieve_evidence", "synthesize_recommendation")
     workflow.add_edge("synthesize_recommendation", "validate_provenance")

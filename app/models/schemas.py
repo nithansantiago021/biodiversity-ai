@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 class EnvironmentalObservation(BaseModel):
 
@@ -45,3 +45,15 @@ class GroundedRecommendationResponse(BaseModel):
     ecological_summary: str = Field(..., description="Synthesis of current multi-variable pressures")
     primary_pressures: List[str] = Field(..., description="Key ecological stress drivers identified")
     recommendations: List[ActionableRecommendation]
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+    observation: Optional[EnvironmentalObservation] = None
+
+class ChatResponse(BaseModel):
+    session_id: str
+    response_type: str
+    content: str
+    data: Optional[Dict[str, Any]] = None
+    chat_history: List[Dict[str, str]]

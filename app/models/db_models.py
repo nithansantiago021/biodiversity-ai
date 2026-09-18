@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, JSON, Text
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.database import Base
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 class EnvironmentalObservation(Base):
@@ -66,3 +68,13 @@ class DocumentChunk(Base):
     document = relationship("Document", back_populates="chunks")
 
 Document.chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(100), index=True, nullable=False)
+    role = Column(String(20), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(ZoneInfo("Asia/Kolkata")))

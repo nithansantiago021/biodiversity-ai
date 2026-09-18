@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation as EnvironmentalObservationDB
-from app.models.schemas import EnvironmentalObservation
+from app.models.schemas import EnvironmentalObservation, ChatRequest, ChatResponse
 from app.agent.workflow import biodiversity_agent
 from app.config import settings
+from app.agent.memory import save_chat_message, get_chat_history
 
 
 app = FastAPI(
@@ -94,3 +95,63 @@ def get_recommendation_for_observation(
         )
 
     return final_state["recommendation_response"]
+
+@app.post("/chat", response_model=ChatResponse)
+def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+    # 1. Save incoming user message
+    save_chat_message(db, payload.session_id, "user", payload.message)
+
+    # 2. If an inline observation payload was sent, persist it to DB so it acquires an .id
+    db_obs = None
+    if payload.observation:
+        db_obs = EnvironmentalObservationDB(**payload.observation.model_dump())
+        db.add(db_obs)
+        db.commit()
+        db.refresh(db_obs)
+
+    # 3. Construct initial Agent state payload with DB instance
+    initial_state = {
+        "observation_id": db_obs.id if db_obs else None,
+        "observation": db_obs,
+        "user_query": payload.message,
+        "db": db,
+        "needs_clarification": False,
+        "clarification_question": None,
+        "generated_queries": [],
+        "scientific_evidence": [],
+        "recommendation_response": {},
+        "validation_passed": False,
+        "errors": [],
+    }
+
+    # 4. Invoke LangGraph agent execution graph
+    final_state = biodiversity_agent.invoke(initial_state)
+
+    # 5. Handle Clarification vs Recommendation execution branches
+    if final_state.get("needs_clarification"):
+        reply_content = final_state.get(
+            "clarification_question",
+            "Can you provide soil organic carbon %, rainfall pattern, soil pH, or land use type?",
+        )
+        save_chat_message(db, payload.session_id, "assistant", reply_content)
+        history = get_chat_history(db, payload.session_id)
+        return ChatResponse(
+            session_id=payload.session_id,
+            response_type="clarification",
+            content=reply_content,
+            data=None,
+            chat_history=history,
+        )
+
+    rec_data = final_state.get("recommendation_response", {})
+    summary = rec_data.get("ecological_summary", "Grounded recommendation generated successfully.")
+    save_chat_message(db, payload.session_id, "assistant", summary)
+    history = get_chat_history(db, payload.session_id)
+
+    return ChatResponse(
+        session_id=payload.session_id,
+        response_type="recommendation",
+        content=summary,
+        data=rec_data,
+        chat_history=history,
+    )
