@@ -31,7 +31,9 @@ class BiodiversityAgentState(TypedDict, total=False):
 
 
 # 2. Helper Utilities
-def _load_observation(db, observation_id: Optional[int]) -> Optional[EnvironmentalObservation]:
+def _load_observation(
+    db, observation_id: Optional[int]
+) -> Optional[EnvironmentalObservation]:
     """Fetch a persisted observation by id using a caller-supplied session."""
     if observation_id is None:
         return None
@@ -55,23 +57,37 @@ def _infer_metric_queries(text: str) -> List[str]:
 
     ph_match = re.search(r"ph\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)", text_l)
     if ph_match:
-        queries.append(f"Effects of soil pH {ph_match.group(1)} on biodiversity and nutrient availability.")
+        queries.append(
+            f"Effects of soil pH {ph_match.group(1)} on biodiversity and nutrient availability."
+        )
 
-    soc_match = re.search(r"(?:soc|organic carbon)\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)%?", text_l)
+    soc_match = re.search(
+        r"(?:soc|organic carbon)\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)%?", text_l
+    )
     if soc_match:
-        queries.append(f"Impacts of soil organic carbon at {soc_match.group(1)}% on soil health and biodiversity.")
+        queries.append(
+            f"Impacts of soil organic carbon at {soc_match.group(1)}% on soil health and biodiversity."
+        )
 
     if any(k in text_l for k in ["rain", "monsoon", "drought"]):
-        queries.append("Effects of low rainfall and drought stress on soil biodiversity and species survival.")
+        queries.append(
+            "Effects of low rainfall and drought stress on soil biodiversity and species survival."
+        )
 
     if "monoculture" in text_l:
-        queries.append("Impacts of monoculture cropping on habitat diversity and species richness.")
+        queries.append(
+            "Impacts of monoculture cropping on habitat diversity and species richness."
+        )
 
     if "deforest" in text_l:
-        queries.append("Consequences of deforestation on habitat fragmentation and species richness.")
+        queries.append(
+            "Consequences of deforestation on habitat fragmentation and species richness."
+        )
 
     if "pollut" in text_l:
-        queries.append("Ecotoxicological effects of pollution on soil fauna and biodiversity.")
+        queries.append(
+            "Ecotoxicological effects of pollution on soil fauna and biodiversity."
+        )
 
     return queries
 
@@ -82,13 +98,36 @@ def evaluate_input_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     has_observation = state.get("observation_id") is not None
     query_text = _latest_user_text(state).lower()
 
-    bypass_phrases = ["dont know", "don't know", "no metrics", "give me all", "tell me", "what does", "effects of"]
-    user_requested_direct_search = any(phrase in query_text for phrase in bypass_phrases)
+    bypass_phrases = [
+        "dont know",
+        "don't know",
+        "no metrics",
+        "give me all",
+        "tell me",
+        "what does",
+        "effects of",
+    ]
+    user_requested_direct_search = any(
+        phrase in query_text for phrase in bypass_phrases
+    )
 
     if has_observation or count >= 2 or user_requested_direct_search:
         return {"needs_clarification": False, "clarification_question": None}
 
-    essential_keywords = ["carbon", "ph", "rainfall", "moisture", "temperature", "nitrogen", "soil", "so2", "sulfur", "sulphur", "tds", "bis"]
+    essential_keywords = [
+        "carbon",
+        "ph",
+        "rainfall",
+        "moisture",
+        "temperature",
+        "nitrogen",
+        "soil",
+        "so2",
+        "sulfur",
+        "sulphur",
+        "tds",
+        "bis",
+    ]
     has_metric_mention = any(kw in query_text for kw in essential_keywords)
 
     if not has_metric_mention:
@@ -145,7 +184,10 @@ def ground_metrics_node(state: BiodiversityAgentState) -> Dict[str, Any]:
         combined_topic_query = user_text
     else:
         queries = _infer_metric_queries(user_text)
-        combined_topic_query = user_text or "sulfur dioxide SO2 atmospheric pollution effects on lake water quality"
+        combined_topic_query = (
+            user_text
+            or "sulfur dioxide SO2 atmospheric pollution effects on lake water quality"
+        )
 
     queries.insert(0, combined_topic_query)
     unique_queries = list(dict.fromkeys(q for q in queries if q))
@@ -166,14 +208,16 @@ def retrieve_evidence_node(state: BiodiversityAgentState) -> Dict[str, Any]:
                 chunk_id = item.get("chunk_id")
                 if chunk_id and chunk_id not in seen_chunk_ids:
                     seen_chunk_ids.add(chunk_id)
-                    evidence_items.append({
-                        "query_trigger": q,
-                        "chunk_id": chunk_id,
-                        "page_number": item.get("page_number"),
-                        "rerank_score": item.get("rerank_score"),
-                        "chunk_text": item.get("chunk_text"),
-                        "provenance": item.get("provenance"),
-                    })
+                    evidence_items.append(
+                        {
+                            "query_trigger": q,
+                            "chunk_id": chunk_id,
+                            "page_number": item.get("page_number"),
+                            "rerank_score": item.get("rerank_score"),
+                            "chunk_text": item.get("chunk_text"),
+                            "provenance": item.get("provenance"),
+                        }
+                    )
     finally:
         db.close()
 
@@ -191,15 +235,22 @@ def synthesize_recommendation_node(state: BiodiversityAgentState) -> Dict[str, A
         try:
             obs = _load_observation(db, observation_id)
             if obs is None:
-                raise ValueError(f"No EnvironmentalObservation found for id {observation_id}.")
+                raise ValueError(
+                    f"No EnvironmentalObservation found for id {observation_id}."
+                )
             recommendation_data = generate_grounded_recommendation(db, obs)
         finally:
             db.close()
 
         if isinstance(recommendation_data, dict):
             recommendation_data["observation_id"] = obs.id
-            if "ecological_summary" not in recommendation_data and "summary" in recommendation_data:
-                recommendation_data["ecological_summary"] = recommendation_data["summary"]
+            if (
+                "ecological_summary" not in recommendation_data
+                and "summary" in recommendation_data
+            ):
+                recommendation_data["ecological_summary"] = recommendation_data[
+                    "summary"
+                ]
 
         summary = (
             recommendation_data.get("ecological_summary")
@@ -228,10 +279,12 @@ def synthesize_recommendation_node(state: BiodiversityAgentState) -> Dict[str, A
 
     llm = get_chat_llm()
 
-    context_str = "\n\n".join([
-        f"[Chunk {item.get('chunk_id')} | Doc: {item.get('provenance', {}).get('document_title')} | Page: {item.get('page_number')}]\n{item.get('chunk_text')}"
-        for item in evidence
-    ])
+    context_str = "\n\n".join(
+        [
+            f"[Chunk {item.get('chunk_id')} | Doc: {item.get('provenance', {}).get('document_title')} | Page: {item.get('page_number')}]\n{item.get('chunk_text')}"
+            for item in evidence
+        ]
+    )
 
     synthesis_prompt = f"""You are an Ecological AI Engine.
 User Query: "{user_query}"
@@ -262,7 +315,11 @@ CRITICAL INSTRUCTIONS:
 
 def validate_provenance_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     """Node 4: Validates chunk provenance citations against retrieved evidence."""
-    evidence_chunk_ids = {item["chunk_id"] for item in state.get("scientific_evidence", []) if "chunk_id" in item}
+    evidence_chunk_ids = {
+        item["chunk_id"]
+        for item in state.get("scientific_evidence", [])
+        if "chunk_id" in item
+    }
     rec_response = state.get("recommendation_response", {})
 
     errors = []
@@ -270,7 +327,9 @@ def validate_provenance_node(state: BiodiversityAgentState) -> Dict[str, Any]:
         for citation in rec.get("citations", []):
             cited_id = citation.get("chunk_id")
             if cited_id and cited_id not in evidence_chunk_ids:
-                errors.append(f"Invalid citation: chunk_id {cited_id} missing from evidence.")
+                errors.append(
+                    f"Invalid citation: chunk_id {cited_id} missing from evidence."
+                )
 
     return {"validation_passed": len(errors) == 0, "errors": errors}
 

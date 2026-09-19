@@ -1,6 +1,10 @@
 from sqlalchemy import text
 from app.database import engine, Base
-from app.models.db_models import EnvironmentalObservation, Document, DocumentChunk
+from app.models.db_models import (  # noqa: F401
+    EnvironmentalObservation,
+    Document,
+    DocumentChunk,
+)
 
 
 def init_db():

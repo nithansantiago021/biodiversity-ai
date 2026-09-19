@@ -32,19 +32,29 @@ def _build_fake_structured_response(schema: Type, prompt_value):
     id that would fail app.agent.workflow.validate_provenance_node's
     citation check.
     """
-    text = prompt_value.to_string() if hasattr(prompt_value, "to_string") else str(prompt_value)
+    text = (
+        prompt_value.to_string()
+        if hasattr(prompt_value, "to_string")
+        else str(prompt_value)
+    )
     match = _CHUNK_REF_PATTERN.search(text)
 
     if match:
         citation = {
             "document_title": match.group("doc").strip(),
-            "page_number": int(match.group("page")) if match.group("page").isdigit() else 1,
+            "page_number": (
+                int(match.group("page")) if match.group("page").isdigit() else 1
+            ),
             "chunk_id": int(match.group("chunk_id")),
         }
     else:
         # No evidence was retrieved for this call -- cite nothing real rather
         # than fabricating an id that would fail provenance validation.
-        citation = {"document_title": "No evidence retrieved", "page_number": 1, "chunk_id": 0}
+        citation = {
+            "document_title": "No evidence retrieved",
+            "page_number": 1,
+            "chunk_id": 0,
+        }
 
     payload = {
         "observation_id": 0,  # overwritten by the caller with the real observation id
@@ -84,7 +94,9 @@ class FakeChatLLM:
         )
 
     def with_structured_output(self, schema: Type):
-        return RunnableLambda(lambda prompt_value: _build_fake_structured_response(schema, prompt_value))
+        return RunnableLambda(
+            lambda prompt_value: _build_fake_structured_response(schema, prompt_value)
+        )
 
 
 def get_chat_llm(temperature: Optional[float] = None):

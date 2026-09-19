@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 import csv
 import io
 from sqlalchemy.orm import Session
-from typing import List, Optional, Any, Dict
+from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage
 
@@ -10,14 +10,12 @@ from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation as EnvironmentalObservationDB
 from app.models.schemas import EnvironmentalObservation, ChatRequest, ChatResponse
 from app.agent.workflow import biodiversity_agent
-from app.config import settings
 from app.agent.memory import save_chat_message, get_chat_history
-
 
 app = FastAPI(
     title="Biodiversity AI",
     description="AI-powered environmental intelligence system",
-    version="0.1.0"
+    version="0.1.0",
 )
 
 
@@ -32,17 +30,12 @@ def get_db():
 
 @app.get("/")
 def root():
-    return {
-        "message": "Biodiversity AI system online"
-    }
+    return {"message": "Biodiversity AI system online"}
 
 
 @app.get("/health")
 def health():
-    return {
-        "status": "healthy",
-        "service": "biodiversity-ai"
-    }
+    return {"status": "healthy", "service": "biodiversity-ai"}
 
 
 @app.post("/observations", status_code=status.HTTP_201_CREATED)
@@ -54,7 +47,10 @@ def create_observation(
     db.add(db_obs)
     db.commit()
     db.refresh(db_obs)
-    return {"id": db_obs.id, "message": "Environmental observation created successfully"}
+    return {
+        "id": db_obs.id,
+        "message": "Environmental observation created successfully",
+    }
 
 
 @app.post("/observations/{observation_id}/recommendations")
@@ -99,6 +95,7 @@ def get_recommendation_for_observation(
         )
 
     return final_state["recommendation_response"]
+
 
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
@@ -148,7 +145,11 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
         )
 
     rec_data = final_state.get("recommendation_response", {})
-    summary = rec_data.get("ecological_summary") or final_state.get("final_response") or "Grounded recommendation generated successfully."
+    summary = (
+        rec_data.get("ecological_summary")
+        or final_state.get("final_response")
+        or "Grounded recommendation generated successfully."
+    )
     save_chat_message(db, payload.session_id, "assistant", summary)
     history = get_chat_history(db, payload.session_id)
 
@@ -160,18 +161,18 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
         chat_history=history,
     )
 
+
 @app.post("/observations/upload-csv", status_code=status.HTTP_201_CREATED)
 def upload_csv_observations(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    file: UploadFile = File(...), db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
     Batch ingests environmental observations from an uploaded CSV file.
     """
-    if not file.filename.endswith('.csv'):
+    if not file.filename.endswith(".csv"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file format. Please upload a .csv file."
+            detail="Invalid file format. Please upload a .csv file.",
         )
 
     content = file.file.read().decode("utf-8")
@@ -201,5 +202,5 @@ def upload_csv_observations(
     db.commit()
     return {
         "message": f"Successfully ingested {len(created_records)} environmental observations.",
-        "record_count": len(created_records)
+        "record_count": len(created_records),
     }
