@@ -17,7 +17,7 @@ def get_reranker() -> CrossEncoder:
 def search_similar_chunks(
     db: Session,
     query_text: str,
-    top_k: int = 5,
+    top_k: int = 10,
     candidate_pool_size: int = 25,
 ) -> list[dict]:
     """

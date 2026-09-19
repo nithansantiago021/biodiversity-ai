@@ -26,7 +26,7 @@ def test_chat_endpoint_triggers_clarification_on_vague_input():
     assert len(data["chat_history"]) == 2
 
 
-def test_chat_endpoint_processes_full_observation():
+def test_chat_endpoint_processes_full_observation(knowledge_base):
     session_id = f"test-chat-{uuid.uuid4()}"
     payload = {
         "session_id": session_id,

@@ -46,7 +46,7 @@ def test_invalid_soil_ph():
         )
 
 
-def test_get_recommendation_endpoint_success(client):
+def test_get_recommendation_endpoint_success(client, knowledge_base):
     # 1. Post a valid observation
     payload = {
         "latitude": 13.0827,

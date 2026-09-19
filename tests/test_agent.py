@@ -1,9 +1,11 @@
+import uuid
+
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation
 from app.agent.workflow import biodiversity_agent
 
 
-def test_langgraph_agent_execution_end_to_end():
+def test_langgraph_agent_execution_end_to_end(knowledge_base):
     db = SessionLocal()
     obs = None
 
@@ -29,8 +31,6 @@ def test_langgraph_agent_execution_end_to_end():
 
         initial_state = {
             "observation_id": obs.id,
-            "observation": obs,
-            "db": db,
             "generated_queries": [],
             "scientific_evidence": [],
             "recommendation_response": {},
@@ -38,7 +38,9 @@ def test_langgraph_agent_execution_end_to_end():
             "errors": [],
         }
 
-        final_state = biodiversity_agent.invoke(initial_state)
+        # A checkpointed graph requires a thread_id in config.
+        config = {"configurable": {"thread_id": f"test-agent-{uuid.uuid4()}"}}
+        final_state = biodiversity_agent.invoke(initial_state, config=config)
 
         assert final_state["observation_id"] == obs.id
         assert len(final_state["generated_queries"]) > 0

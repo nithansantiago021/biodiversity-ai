@@ -1,6 +1,5 @@
 import re
 from typing import TypedDict, List, Dict, Any, Optional, Annotated
-from sqlalchemy.orm import Session
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
@@ -12,21 +11,14 @@ from app.knowledge.grounding import generate_observation_queries
 from app.knowledge.retrieval import search_similar_chunks
 from app.knowledge.synthesis import generate_grounded_recommendation
 from app.llm import get_chat_llm
-from app.config import settings
 
 
 # 1. State Schema Definition
-# NOTE: `messages` uses the `add_messages` reducer so that, combined with a
-# checkpointer, conversation history and clarification_count genuinely
-# persist across separate .invoke() calls that share a thread_id -- this is
-# what actually makes multi-turn memory work (previously it did not).
 class BiodiversityAgentState(TypedDict, total=False):
     observation_id: Optional[int]
-    observation: Optional[EnvironmentalObservation]
     user_query: Optional[str]
     user_prompt: Optional[str]
     messages: Annotated[List[BaseMessage], add_messages]
-    db: Optional[Session]
     needs_clarification: bool
     clarification_count: int
     clarification_question: Optional[str]
@@ -39,11 +31,11 @@ class BiodiversityAgentState(TypedDict, total=False):
 
 
 # 2. Helper Utilities
-def _ensure_db_session(state: BiodiversityAgentState) -> Session:
-    db = state.get("db")
-    if db is None:
-        return SessionLocal()
-    return db
+def _load_observation(db, observation_id: Optional[int]) -> Optional[EnvironmentalObservation]:
+    """Fetch a persisted observation by id using a caller-supplied session."""
+    if observation_id is None:
+        return None
+    return db.get(EnvironmentalObservation, observation_id)
 
 
 def _latest_user_text(state: BiodiversityAgentState) -> str:
@@ -58,96 +50,45 @@ def _latest_user_text(state: BiodiversityAgentState) -> str:
 
 
 def _infer_metric_queries(text: str) -> List[str]:
-    """
-    Lightweight keyword/regex inference used ONLY to generate extra grounding
-    queries for free-text conversations. Unlike the old implementation, this
-    never constructs a full EnvironmentalObservation and never causes the
-    workflow to switch into the structured (Branch A) recommendation path --
-    that path is reserved for requests that supply a real, persisted
-    observation (via JSON payload or observation_id).
-    """
     text_l = text.lower()
     queries: List[str] = []
 
     ph_match = re.search(r"ph\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)", text_l)
     if ph_match:
-        queries.append(
-            f"Effects of soil pH {ph_match.group(1)} on biodiversity and nutrient availability."
-        )
+        queries.append(f"Effects of soil pH {ph_match.group(1)} on biodiversity and nutrient availability.")
 
-    soc_match = re.search(
-        r"(?:soc|organic carbon)\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)%?", text_l
-    )
+    soc_match = re.search(r"(?:soc|organic carbon)\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)%?", text_l)
     if soc_match:
-        queries.append(
-            f"Impacts of soil organic carbon at {soc_match.group(1)}% on soil health and biodiversity."
-        )
+        queries.append(f"Impacts of soil organic carbon at {soc_match.group(1)}% on soil health and biodiversity.")
 
     if any(k in text_l for k in ["rain", "monsoon", "drought"]):
-        queries.append(
-            "Effects of low rainfall and drought stress on soil biodiversity and species survival."
-        )
+        queries.append("Effects of low rainfall and drought stress on soil biodiversity and species survival.")
 
     if "monoculture" in text_l:
-        queries.append(
-            "Impacts of monoculture cropping on habitat diversity and species richness."
-        )
+        queries.append("Impacts of monoculture cropping on habitat diversity and species richness.")
 
     if "deforest" in text_l:
-        queries.append(
-            "Consequences of deforestation on habitat fragmentation and species richness."
-        )
+        queries.append("Consequences of deforestation on habitat fragmentation and species richness.")
 
     if "pollut" in text_l:
-        queries.append(
-            "Ecotoxicological effects of pollution on soil fauna and biodiversity."
-        )
+        queries.append("Ecotoxicological effects of pollution on soil fauna and biodiversity.")
 
     return queries
 
 
 # 3. Node Functions
 def evaluate_input_node(state: BiodiversityAgentState) -> Dict[str, Any]:
-    """
-    Gatekeeper node: Evaluates user input.
-    Bypasses clarification if a real observation is present, the max
-    clarification loop count (2) has been reached, or the user explicitly
-    says they don't know exact metrics / wants a direct answer.
-    """
     count = state.get("clarification_count", 0)
-    obs = state.get("observation")
+    has_observation = state.get("observation_id") is not None
     query_text = _latest_user_text(state).lower()
 
-    bypass_phrases = [
-        "dont know",
-        "don't know",
-        "no metrics",
-        "give me all",
-        "tell me",
-        "what does",
-        "effects of",
-    ]
-    user_requested_direct_search = any(
-        phrase in query_text for phrase in bypass_phrases
-    )
+    bypass_phrases = ["dont know", "don't know", "no metrics", "give me all", "tell me", "what does", "effects of"]
+    user_requested_direct_search = any(phrase in query_text for phrase in bypass_phrases)
 
-    if obs or count >= 2 or user_requested_direct_search:
+    if has_observation or count >= 2 or user_requested_direct_search:
         return {"needs_clarification": False, "clarification_question": None}
 
-    essential_keywords = [
-        "carbon",
-        "ph",
-        "rainfall",
-        "moisture",
-        "temperature",
-        "nitrogen",
-        "soil",
-        "so2",
-        "sulfur",
-        "sulphur",
-        "tds",
-        "bis",
-    ]
+    essential_keywords = ["carbon", "ph", "rainfall", "moisture", "temperature", "nitrogen", "soil", "so2", "sulfur", "sulphur", "tds", "bis"]
     has_metric_mention = any(kw in query_text for kw in essential_keywords)
 
     if not has_metric_mention:
@@ -157,7 +98,6 @@ def evaluate_input_node(state: BiodiversityAgentState) -> Dict[str, Any]:
 
 
 def ask_clarification_node(state: BiodiversityAgentState) -> Dict[str, Any]:
-    """Node A: Uses dynamic LLM to ask clarification questions and increments loop count."""
     user_query = _latest_user_text(state)
     current_count = state.get("clarification_count", 0)
 
@@ -191,26 +131,21 @@ INSTRUCTIONS:
 def ground_metrics_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     """
     Node 1: Builds the vector-search query set.
-
-    Branch A (real observation present): generate metric-driven queries from
-    the structured EnvironmentalObservation.
-    Branch B (plain text): infer light supplementary queries from the text
-    itself. Crucially, this NEVER sets state["observation"] -- doing so
-    previously caused every text query to be misrouted into the structured
-    recommendation branch using fabricated placeholder metrics.
     """
-    obs = state.get("observation")
+    observation_id = state.get("observation_id")
     user_text = _latest_user_text(state)
 
-    if obs is not None:
-        queries = generate_observation_queries(obs)
+    if observation_id is not None:
+        db = SessionLocal()
+        try:
+            obs = _load_observation(db, observation_id)
+        finally:
+            db.close()
+        queries = generate_observation_queries(obs) if obs is not None else []
         combined_topic_query = user_text
     else:
         queries = _infer_metric_queries(user_text)
-        combined_topic_query = (
-            user_text
-            or "sulfur dioxide SO2 atmospheric pollution effects on lake water quality"
-        )
+        combined_topic_query = user_text or "sulfur dioxide SO2 atmospheric pollution effects on lake water quality"
 
     queries.insert(0, combined_topic_query)
     unique_queries = list(dict.fromkeys(q for q in queries if q))
@@ -219,7 +154,7 @@ def ground_metrics_node(state: BiodiversityAgentState) -> Dict[str, Any]:
 
 def retrieve_evidence_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     """Node 2: Executes two-stage retrieval (pgvector + Cross-Encoder) for queries."""
-    db = _ensure_db_session(state)
+    db = SessionLocal()
     queries = state.get("generated_queries", [])
     evidence_items = []
     seen_chunk_ids = set()
@@ -231,59 +166,40 @@ def retrieve_evidence_node(state: BiodiversityAgentState) -> Dict[str, Any]:
                 chunk_id = item.get("chunk_id")
                 if chunk_id and chunk_id not in seen_chunk_ids:
                     seen_chunk_ids.add(chunk_id)
-                    evidence_items.append(
-                        {
-                            "query_trigger": q,
-                            "chunk_id": chunk_id,
-                            "page_number": item.get("page_number"),
-                            "rerank_score": item.get("rerank_score"),
-                            "chunk_text": item.get("chunk_text"),
-                            "provenance": item.get("provenance"),
-                        }
-                    )
+                    evidence_items.append({
+                        "query_trigger": q,
+                        "chunk_id": chunk_id,
+                        "page_number": item.get("page_number"),
+                        "rerank_score": item.get("rerank_score"),
+                        "chunk_text": item.get("chunk_text"),
+                        "provenance": item.get("provenance"),
+                    })
     finally:
-        if state.get("db") is None:
-            db.close()
+        db.close()
 
     return {"scientific_evidence": evidence_items}
 
 
 def synthesize_recommendation_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     """Node 3: Synthesizes structured recommendations or text RAG response."""
-    db = _ensure_db_session(state)
-    obs = state.get("observation")
+    observation_id = state.get("observation_id")
     evidence = state.get("scientific_evidence", [])
     user_query = _latest_user_text(state)
 
-    # Branch A: Structured Observation Workflow -- only when a REAL,
-    # persisted EnvironmentalObservation was supplied (JSON payload or a
-    # valid observation_id). No fabrication/fallback here anymore.
-    if obs is not None or state.get("observation_id") is not None:
-        if obs is None and state.get("observation_id") is not None:
-            obs = db.query(EnvironmentalObservation).get(state["observation_id"])
-
-        if obs is None:
-            if state.get("db") is None:
-                db.close()
-            raise ValueError(
-                "Structured recommendation requested but no matching observation could be loaded."
-            )
-
+    if observation_id is not None:
+        db = SessionLocal()
         try:
+            obs = _load_observation(db, observation_id)
+            if obs is None:
+                raise ValueError(f"No EnvironmentalObservation found for id {observation_id}.")
             recommendation_data = generate_grounded_recommendation(db, obs)
         finally:
-            if state.get("db") is None:
-                db.close()
+            db.close()
 
         if isinstance(recommendation_data, dict):
             recommendation_data["observation_id"] = obs.id
-            if (
-                "ecological_summary" not in recommendation_data
-                and "summary" in recommendation_data
-            ):
-                recommendation_data["ecological_summary"] = recommendation_data[
-                    "summary"
-                ]
+            if "ecological_summary" not in recommendation_data and "summary" in recommendation_data:
+                recommendation_data["ecological_summary"] = recommendation_data["summary"]
 
         summary = (
             recommendation_data.get("ecological_summary")
@@ -304,8 +220,6 @@ def synthesize_recommendation_node(state: BiodiversityAgentState) -> Dict[str, A
             "Notice: There is insufficient evidence or matching records available in the ingested database "
             "for this specific query and parameter set. Please refine your query or consult additional scientific literature."
         )
-        if state.get("db") is None:
-            db.close()
         return {
             "recommendation_response": {},
             "final_response": refusal,
@@ -314,12 +228,10 @@ def synthesize_recommendation_node(state: BiodiversityAgentState) -> Dict[str, A
 
     llm = get_chat_llm()
 
-    context_str = "\n\n".join(
-        [
-            f"[Chunk {item.get('chunk_id')} | Doc: {item.get('provenance', {}).get('document_title')} | Page: {item.get('page_number')}]\n{item.get('chunk_text')}"
-            for item in evidence
-        ]
-    )
+    context_str = "\n\n".join([
+        f"[Chunk {item.get('chunk_id')} | Doc: {item.get('provenance', {}).get('document_title')} | Page: {item.get('page_number')}]\n{item.get('chunk_text')}"
+        for item in evidence
+    ])
 
     synthesis_prompt = f"""You are an Ecological AI Engine.
 User Query: "{user_query}"
@@ -341,9 +253,6 @@ CRITICAL INSTRUCTIONS:
     response = llm.invoke(synthesis_prompt)
     answer = response.content
 
-    if state.get("db") is None:
-        db.close()
-
     return {
         "recommendation_response": {"summary": answer, "evidence": evidence},
         "final_response": answer,
@@ -353,11 +262,7 @@ CRITICAL INSTRUCTIONS:
 
 def validate_provenance_node(state: BiodiversityAgentState) -> Dict[str, Any]:
     """Node 4: Validates chunk provenance citations against retrieved evidence."""
-    evidence_chunk_ids = {
-        item["chunk_id"]
-        for item in state.get("scientific_evidence", [])
-        if "chunk_id" in item
-    }
+    evidence_chunk_ids = {item["chunk_id"] for item in state.get("scientific_evidence", []) if "chunk_id" in item}
     rec_response = state.get("recommendation_response", {})
 
     errors = []
@@ -365,9 +270,7 @@ def validate_provenance_node(state: BiodiversityAgentState) -> Dict[str, Any]:
         for citation in rec.get("citations", []):
             cited_id = citation.get("chunk_id")
             if cited_id and cited_id not in evidence_chunk_ids:
-                errors.append(
-                    f"Invalid citation: chunk_id {cited_id} missing from evidence."
-                )
+                errors.append(f"Invalid citation: chunk_id {cited_id} missing from evidence.")
 
     return {"validation_passed": len(errors) == 0, "errors": errors}
 
@@ -407,11 +310,6 @@ def build_biodiversity_agent():
     workflow.add_edge("synthesize_recommendation", "validate_provenance")
     workflow.add_edge("validate_provenance", END)
 
-    # Checkpointer gives real multi-turn memory: state (messages,
-    # clarification_count, etc.) persists across .invoke() calls that share
-    # a thread_id via config={"configurable": {"thread_id": ...}}.
-    # NOTE: MemorySaver is in-process only (resets on server restart). Swap
-    # in langgraph-checkpoint-postgres for production durability.
     checkpointer = MemorySaver()
     return workflow.compile(checkpointer=checkpointer)
 
