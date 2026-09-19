@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # LLM & Model Parameters (used when GROQ_API_KEY is available)
-    LLM_MODEL_NAME: str = "openai/gpt-oss-120b"#"qwen/qwen3.8-27b"
+    LLM_MODEL_NAME: str = "openai/gpt-oss-120b"  # "qwen/qwen3.8-27b"
     LLM_TEMPERATURE: float = 0.1
 
     # Local fallback LLM (used automatically when GROQ_API_KEY is NOT set --
