@@ -6,15 +6,15 @@ services:
     container_name: biodiversity-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: biodiversity
-      POSTGRES_USER: biodiversity_user
-      POSTGRES_PASSWORD: biodiversity_password
+      POSTGRES_DB: ${POSTGRES_DB:-biodiversity}
+      POSTGRES_USER: ${POSTGRES_USER:-biodiversity_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-biodiversity_password}
     ports:
-      - "5433:5432"
+      - "5433:5432" # Allows you to connect locally from pgAdmin/DBeaver via localhost:5433
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U biodiversity_user -d biodiversity"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-biodiversity_user} -d ${POSTGRES_DB:-biodiversity}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,9 +26,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://biodiversity_user:biodiversity_password@postgres:5432/biodiversity
+      - DATABASE_URL=${DATABASE_URL:-postgresql://biodiversity_user:biodiversity_password@postgres:5432/biodiversity}
       - GROQ_API_KEY=${GROQ_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       - .:/app
     depends_on:
