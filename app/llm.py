@@ -5,7 +5,7 @@ from typing import Optional, Type
 from langchain_core.runnables import RunnableLambda
 from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
-
+from pydantic import SecretStr
 from app.config import settings
 
 
@@ -122,9 +122,9 @@ def get_chat_llm(temperature: Optional[float] = None):
     api_key = os.getenv("GROQ_API_KEY")
     if api_key:
         return ChatGroq(
-            model_name=settings.LLM_MODEL_NAME,
+            model=settings.LLM_MODEL_NAME,
             temperature=temp,
-            api_key=api_key,
+            api_key=SecretStr(api_key),
         )
 
     # No Groq key available -- use local Ollama instead of crashing.

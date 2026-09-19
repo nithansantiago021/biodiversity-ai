@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, cast
 from sqlalchemy.orm import Session
 from app.models.db_models import ChatMessage
 
@@ -26,4 +26,10 @@ def get_chat_history(
         .all()
     )
     # Reverse list so it returns chronological order (oldest -> newest)
-    return [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
+    return [
+        {
+            "role": cast(str, msg.role),
+            "content": cast(str, msg.content),
+        }
+        for msg in reversed(messages)
+    ]

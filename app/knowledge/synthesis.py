@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, cast
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
@@ -93,7 +93,7 @@ def generate_grounded_recommendation(
 
     # 6. Normalize output dictionary and preserve observation_id
     if isinstance(result, GroundedRecommendationResponse):
-        result.observation_id = observation.id
+        result.observation_id = cast(int, observation.id)
         output_dict = result.model_dump()
     elif isinstance(result, dict):
         result["observation_id"] = observation.id

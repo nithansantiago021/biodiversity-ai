@@ -1,3 +1,5 @@
+from typing import cast
+
 from app.database import SessionLocal
 from app.knowledge.ingestion import create_document, create_document_chunks
 
@@ -45,11 +47,13 @@ def test_document_chunks_have_overlap_and_rich_metadata():
         assert overlap_words
 
         # Verify page provenance and rich metadata
-        assert all(chunk.page_number == 1 for chunk in chunks)
-        assert chunks[0].chunk_metadata["chunk_index"] == 0
-        assert chunks[1].chunk_metadata["chunk_index"] == 1
-        assert chunks[0].chunk_metadata["document_title"] == "Overlap Test Report"
-        assert chunks[0].chunk_metadata["organization"] == "Test Organization"
+        # 1. Cast page_number to int (or use int(...)) to satisfy the boolean condition operator
+        assert all(cast(int, chunk.page_number) == 1 for chunk in chunks)
+        # 2. Accessing chunk_metadata works directly or can be cast if Pylance flags JSON columns
+        assert bool(chunks[0].chunk_metadata["chunk_index"] == 0)
+        assert bool(chunks[1].chunk_metadata["chunk_index"] == 1)
+        assert bool(chunks[0].chunk_metadata["document_title"] == "Overlap Test Report")
+        assert bool(chunks[0].chunk_metadata["organization"] == "Test Organization")
 
     finally:
         for chunk in chunks:

@@ -40,9 +40,9 @@ def test_document_chunk_provenance():
         )
 
         assert stored_chunk is not None
-        assert stored_chunk.document_id == document.id
-        assert stored_chunk.chunk_text.startswith("Soil organic carbon")
-        assert stored_chunk.chunk_metadata["topic"] == "soil_health"
+        assert bool(stored_chunk.document_id == document.id)
+        assert bool(stored_chunk.chunk_text.startswith("Soil organic carbon"))
+        assert bool(stored_chunk.chunk_metadata["topic"] == "soil_health")
 
         db.delete(stored_chunk)
         db.flush()

@@ -1,3 +1,5 @@
+from typing import Sized, cast
+
 from app.database import SessionLocal
 from app.knowledge.ingestion import create_document, create_document_chunks
 from app.knowledge.embeddings import generate_embedding, generate_chunk_embeddings
@@ -54,7 +56,7 @@ def test_generate_chunk_embeddings_and_persistence():
         assert len(updated_chunks) == len(chunks)
         for chunk in updated_chunks:
             assert chunk.embedding is not None
-            assert len(chunk.embedding) == 384
+            assert len(cast(Sized, chunk.embedding)) == 384
 
     finally:
         for chunk in chunks:

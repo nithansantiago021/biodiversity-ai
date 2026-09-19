@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
+from typing import Any, Dict
 
 from app.models.db_models import Document, DocumentChunk
 from app.knowledge.embeddings import generate_chunk_embeddings
@@ -18,7 +19,7 @@ def extract_document_pages(file_path: str) -> list[dict]:
 
     if ext == ".pdf":
         reader = PdfReader(str(path))
-        pages = []
+        pages: list[Dict[str, Any]] = []
         for page_number, page in enumerate(reader.pages, start=1):
             text = (page.extract_text() or "").strip()
             if text:
@@ -87,7 +88,7 @@ def create_document_chunks(
     if existing_chunks:
         return existing_chunks
 
-    chunks_to_add = []
+    chunks_to_add: list[str] = []
     chunk_index = 0
 
     for page in pages:
@@ -98,7 +99,7 @@ def create_document_chunks(
             continue
 
         sentences = split_into_sentences(page_text)
-        current_chunk_sentences = []
+        current_chunk_sentences: list[str] = []
         current_length = 0
 
         for sentence in sentences:
@@ -122,7 +123,7 @@ def create_document_chunks(
                 )
                 chunk_index += 1
 
-                overlap_sentences = []
+                overlap_sentences: list[str] = []
                 overlap_length = 0
                 for s in reversed(current_chunk_sentences):
                     if (

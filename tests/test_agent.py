@@ -1,8 +1,10 @@
 import uuid
+from typing import cast
+from langchain_core.runnables import RunnableConfig
 
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation
-from app.agent.workflow import biodiversity_agent
+from app.agent.workflow import biodiversity_agent, BiodiversityAgentState
 
 
 def test_langgraph_agent_execution_end_to_end(knowledge_base):
@@ -29,8 +31,8 @@ def test_langgraph_agent_execution_end_to_end(knowledge_base):
         db.commit()
         db.refresh(obs)
 
-        initial_state = {
-            "observation_id": obs.id,
+        initial_state: BiodiversityAgentState = {
+            "observation_id": cast(int, obs.id),
             "generated_queries": [],
             "scientific_evidence": [],
             "recommendation_response": {},
@@ -39,7 +41,9 @@ def test_langgraph_agent_execution_end_to_end(knowledge_base):
         }
 
         # A checkpointed graph requires a thread_id in config.
-        config = {"configurable": {"thread_id": f"test-agent-{uuid.uuid4()}"}}
+        config: RunnableConfig = {
+            "configurable": {"thread_id": f"test-agent-{uuid.uuid4()}"}
+        }
         final_state = biodiversity_agent.invoke(initial_state, config=config)
 
         assert final_state["observation_id"] == obs.id

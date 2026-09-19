@@ -1,16 +1,17 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 import csv
 import io
-from sqlalchemy.orm import Session
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
+from sqlalchemy.orm import Session
 
+from app.agent.memory import get_chat_history, save_chat_message
+from app.agent.workflow import BiodiversityAgentState, biodiversity_agent
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation as EnvironmentalObservationDB
-from app.models.schemas import EnvironmentalObservation, ChatRequest, ChatResponse
-from app.agent.workflow import biodiversity_agent
-from app.agent.memory import save_chat_message, get_chat_history
+from app.models.schemas import ChatRequest, ChatResponse, EnvironmentalObservation
 
 app = FastAPI(
     title="Biodiversity AI",
@@ -21,7 +22,6 @@ app = FastAPI(
 
 def get_db():
     db = SessionLocal()
-
     try:
         yield db
     finally:
@@ -73,28 +73,37 @@ def get_recommendation_for_observation(
             detail=f"Environmental observation with ID {observation_id} not found.",
         )
 
-    initial_state = {
-        "observation_id": obs.id,
+    # Complete state initialization matching BiodiversityAgentState schema
+    initial_state: BiodiversityAgentState = {
+        "observation_id": cast(int, obs.id),
+        "user_query": f"Generate recommendation for observation ID {obs.id}",
+        "user_prompt": None,
+        "messages": [],
+        "needs_clarification": False,
+        "clarification_question": None,
         "generated_queries": [],
         "scientific_evidence": [],
         "recommendation_response": {},
         "validation_passed": False,
         "errors": [],
+        "final_response": None,
     }
 
-    config = {"configurable": {"thread_id": f"observation-{observation_id}"}}
+    config: RunnableConfig = {
+        "configurable": {"thread_id": f"observation-{observation_id}"}
+    }
     final_state = biodiversity_agent.invoke(initial_state, config=config)
 
-    if not final_state["validation_passed"]:
+    if not final_state.get("validation_passed", False):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "message": "Agent provenance validation failed.",
-                "errors": final_state["errors"],
+                "errors": final_state.get("errors", []),
             },
         )
 
-    return final_state["recommendation_response"]
+    return final_state.get("recommendation_response", {})
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -110,10 +119,11 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
         db.commit()
         db.refresh(db_obs)
 
-    # 3. Construct the turn's input state.
-    initial_state = {
-        "observation_id": db_obs.id if db_obs else None,
+    # 3. Construct complete turn state
+    initial_state: BiodiversityAgentState = {
+        "observation_id": cast(int, db_obs.id) if db_obs else None,
         "user_query": payload.message,
+        "user_prompt": payload.message,
         "messages": [HumanMessage(content=payload.message)],
         "needs_clarification": False,
         "clarification_question": None,
@@ -122,10 +132,11 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
         "recommendation_response": {},
         "validation_passed": False,
         "errors": [],
+        "final_response": None,
     }
 
     # 4. Invoke LangGraph agent execution graph, scoped to this session's thread
-    config = {"configurable": {"thread_id": payload.session_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": payload.session_id}}
     final_state = biodiversity_agent.invoke(initial_state, config=config)
 
     # 5. Handle Clarification vs Recommendation execution branches
@@ -163,44 +174,56 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRe
 
 
 @app.post("/observations/upload-csv", status_code=status.HTTP_201_CREATED)
-def upload_csv_observations(
+async def upload_csv_observations(
     file: UploadFile = File(...), db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
     Batch ingests environmental observations from an uploaded CSV file.
     """
-    if not file.filename.endswith(".csv"):
+    filename = file.filename
+    if not filename or not filename.endswith(".csv"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid file format. Please upload a .csv file.",
         )
 
-    content = file.file.read().decode("utf-8")
-    csv_reader = csv.DictReader(io.StringIO(content))
+    try:
+        raw_bytes = await file.read()
+        content = raw_bytes.decode("utf-8")
+        csv_reader = csv.DictReader(io.StringIO(content))
 
-    created_records = []
-    for row in csv_reader:
-        obs_data = {
-            "latitude": float(row["latitude"]),
-            "longitude": float(row["longitude"]),
-            "soil_ph": float(row["soil_ph"]),
-            "soil_organic_carbon": float(row["soil_organic_carbon"]),
-            "soil_moisture": float(row["soil_moisture"]),
-            "land_use": str(row["land_use"]),
-            "land_cover": str(row["land_cover"]),
-            "species_richness": float(row["species_richness"]),
-            "habitat_diversity": float(row["habitat_diversity"]),
-            "temperature": float(row["temperature"]),
-            "rainfall": float(row["rainfall"]),
-            "pollution_index": float(row["pollution_index"]),
-            "deforestation_rate": float(row["deforestation_rate"]),
+        created_records = []
+        for row_idx, row in enumerate(csv_reader, start=1):
+            try:
+                obs_data = {
+                    "latitude": float(row["latitude"]),
+                    "longitude": float(row["longitude"]),
+                    "soil_ph": float(row["soil_ph"]),
+                    "soil_organic_carbon": float(row["soil_organic_carbon"]),
+                    "soil_moisture": float(row["soil_moisture"]),
+                    "land_use": str(row["land_use"]),
+                    "land_cover": str(row["land_cover"]),
+                    "species_richness": float(row["species_richness"]),
+                    "habitat_diversity": float(row["habitat_diversity"]),
+                    "temperature": float(row["temperature"]),
+                    "rainfall": float(row["rainfall"]),
+                    "pollution_index": float(row["pollution_index"]),
+                    "deforestation_rate": float(row["deforestation_rate"]),
+                }
+                db_obs = EnvironmentalObservationDB(**obs_data)
+                db.add(db_obs)
+                created_records.append(db_obs)
+            except (ValueError, KeyError) as e:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"CSV row {row_idx} contains invalid or missing data fields: {str(e)}",
+                )
+
+        db.commit()
+        return {
+            "message": f"Successfully ingested {len(created_records)} environmental observations.",
+            "record_count": len(created_records),
         }
-        db_obs = EnvironmentalObservationDB(**obs_data)
-        db.add(db_obs)
-        created_records.append(db_obs)
-
-    db.commit()
-    return {
-        "message": f"Successfully ingested {len(created_records)} environmental observations.",
-        "record_count": len(created_records),
-    }
+    finally:
+        await file.close()

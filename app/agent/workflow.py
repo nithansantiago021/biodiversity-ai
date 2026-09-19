@@ -44,9 +44,13 @@ def _latest_user_text(state: BiodiversityAgentState) -> str:
     """Best-effort extraction of the current user text."""
     text = state.get("user_query") or state.get("user_prompt") or ""
     if not text and state.get("messages"):
-        for msg in reversed(state["messages"]):
+        for msg in reversed(state.get("messages") or []):
             if getattr(msg, "type", None) == "human":
-                text = msg.content
+                content = msg.content
+                if isinstance(content, str):
+                    text = content
+                else:
+                    text = str(content)
                 break
     return text or ""
 
@@ -154,7 +158,11 @@ INSTRUCTIONS:
 """
 
     response = llm.invoke(clarify_prompt)
-    question = response.content.strip()
+    content = response.content
+    if isinstance(content, str):
+        question = content.strip()
+    else:
+        question = str(content).strip()
 
     return {
         "clarification_count": current_count + 1,

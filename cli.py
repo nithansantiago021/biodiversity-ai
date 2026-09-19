@@ -1,7 +1,8 @@
 import sys
 import uuid
 from langchain_core.messages import HumanMessage
-from app.agent.workflow import biodiversity_agent
+from langchain_core.runnables import RunnableConfig
+from app.agent.workflow import biodiversity_agent, BiodiversityAgentState
 
 
 def main():
@@ -27,9 +28,9 @@ def main():
                 print("Session memory cleared. Topic thread reset.")
                 continue
 
-            config = {"configurable": {"thread_id": session_thread_id}}
+            config: RunnableConfig = {"configurable": {"thread_id": session_thread_id}}
 
-            input_payload = {
+            input_payload: BiodiversityAgentState = {
                 "user_query": user_input,
                 "user_prompt": user_input,
                 "messages": [HumanMessage(content=user_input)],
