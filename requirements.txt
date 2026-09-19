@@ -17,6 +17,7 @@ pgvector>=0.2.0
 # Document Ingestion & ML Processing
 pypdf>=4.0.0
 sentence-transformers>=2.5.0
+langchain-huggingface>=0.0.1
 scikit-learn>=1.4.0
 numpy>=1.26.0
 

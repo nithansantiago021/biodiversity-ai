@@ -3,7 +3,7 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches-ignore:
+    branches:
       - main
   pull_request:
     branches:
@@ -110,4 +110,6 @@ jobs:
         run: python -m app.init_db
 
       - name: Run test suite
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: pytest -q

@@ -1,17 +1,25 @@
 # Biodiversity AI & Ecological Restoration Engine
 
+![CI Workflow](https://github.com/<nithansantiago021>/<biodiversity-ai>/actions/workflows/ci.yml/badge.svg)
+
 A production-grade, RAG-enabled AI engine designed to process environmental metrics, synthesize ecological pressures, and generate scientifically grounded restoration recommendations. Built with a conversational agent interface and multi-stage vector retrieval, this system acts as an expert intelligence layer for ecological restoration.
+
+* **Live Demo (Streamlit):** [biodiversity-ai-de.streamlit.app](https://biodiversity-ai-de.streamlit.app/)
+* **Backend Health Check:** [biodiversity-backend.onrender.com/health](https://biodiversity-backend.onrender.com/health)  
+  *(Note: Hosted on Render's free tier. Opening the health link wakes up the instance if it is sleeping).*
 
 ## System Architecture
 
-The application implements a hybrid LLM architecture combining deterministic evaluation gates with vector-based Retrieval-Augmented Generation (RAG):
+The application implements a hybrid LLM architecture combining deterministic evaluation gates with two-stage Retrieval-Augmented Generation (RAG):
 
-* **API & Core:** FastAPI, SQLAlchemy (PostgreSQL).
-* **Conversational AI Workflow:** LangGraph (State Machine).
-* **Vector Store & Retrieval:** `pgvector` for PostgreSQL.
-* **Embeddings:** `all-MiniLM-L6-v2` (SentenceTransformers) generating 384-dimensional vectors.
-* **Data Ingestion:** Automated pipeline for `.pdf`, `.txt`, and `.md` unstructured parsing + `.csv` batch structured data.
-* **Memory:** Persistent PostgreSQL conversational memory.
+* **API & Core:** FastAPI, SQLAlchemy, Pydantic.
+* **Conversational Agent Workflow:** LangGraph (State Machine with multi-turn memory).
+* **Vector Store & Database:** PostgreSQL with `pgvector` hosted on Supabase.
+* **Serverless Vector Pipeline:**
+  * **Embeddings:** `sentence-transformers/all-MiniLM-L6-v2` via Hugging Face Serverless Inference API (384-dimensional vectors).
+  * **Reranking:** `cross-encoder/ms-marco-MiniLM-L-6-v2` via serverless joint-attention inference.
+* **Data Ingestion:** Automated pipeline for unstructured document parsing (`.pdf`, `.txt`, `.md`) and structured batch processing (`.csv`).
+* **Memory & Persistence:** Persistent session memory stored directly in PostgreSQL (`chat_messages`).
 
 ## Key Features
 
@@ -33,7 +41,7 @@ The application implements a hybrid LLM architecture combining deterministic eva
 ### Example cURL: Chat Endpoint
 ```bash
 curl -X 'POST' \
-  '[https://biodiversity-ai-backend.onrender.com/chat](https://biodiversity-ai-backend.onrender.com/chat)' \
+  'https://biodiversity-backend.onrender.com/chat' \
   -H 'Content-Type: application/json' \
   -d '{
   "session_id": "demo-session-01",
@@ -41,12 +49,32 @@ curl -X 'POST' \
 }'
 ```
 
+## CI/CD & Deployment Pipeline
+
+This project uses an automated continuous integration and continuous deployment workflow to ensure code quality and seamless hosting.
+
+### 1. Continuous Integration (GitHub Actions)
+* **Automated Testing:** On every `push` or `pull_request` to the `main` branch, a GitHub Actions workflow executes:
+  * **Code Linting & Formatting:** Checks code standards using `flake8` / `black`.
+  * **Automated Test Suite:** Runs `pytest` to execute unit and integration tests across backend modules.
+  * **Dependency Audit:** Verifies that required packages build cleanly in a isolated Python 3.12 environment.
+
+### 2. Continuous Deployment (Render & Webhooks)
+* **Backend Deployment:** The FastAPI application is connected to **Render** via automated Git webhooks.
+  * Pushing changes to `main` automatically triggers a cloud build.
+  * Render installs dependencies, runs container health checks (`/health`), and deploys the live service without downtime.
+* **Environment Configuration:** Production credentials (`DATABASE_URL`, `HF_TOKEN`, `GROQ_API_KEY`) are injected securely through Render's managed Environment Settings.
+
+### 3. Pipeline Architecture Flow
+`Developer Commit` ➔ `GitHub Push` ➔ `GitHub Actions (pytest & linting)` ➔ `Render Auto-Deploy Webhook` ➔ `Live Production API`
+
+
 ## Local Setup
 
 ### Clone & Environment:
 
 ```bash
-git clone <repo_url>
+git clone https://github.com/nithansantiago021/biodiversity-ai.git
 cd biodiversity-ai
 python -m venv venv
 source venv/bin/activate
@@ -68,9 +96,7 @@ pip install -r requirements.txt
 # Code snippet
 DATABASE_URL=postgresql://user:password@localhost:5432/biodiversity_db
 GROQ_API_KEY=gsk_your_groq_api_key_here
-LLM_MODEL_NAME=llama-3.3-70b-versatile
-LLM_TEMPERATURE=0.1
-HF_HUB_OFFLINE=1
+HF_TOKEN=hf_your_hf_access_code_here (read-only)
 ```
 
 ### Run Database Migrations & Ingest Documents:
@@ -89,6 +115,11 @@ pytest -q
 python cli.py
 ```
 
+### Lanch Streamlit UI:
+```bash
+streamlit run frontend.py
+```
+
 ## Recommended Test Queries for Review
 
 Direct Parameter Query:
@@ -101,4 +132,4 @@ Standard Water Query:
 
 Clarification Trigger Query:
 
-        "How do I improve my farm's soil quality?"
+        "how to mitigate land detoriation?"

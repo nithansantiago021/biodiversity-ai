@@ -1,31 +1,61 @@
-from sentence_transformers import CrossEncoder
+import os
+import requests
+from typing import List, Tuple
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.models.db_models import DocumentChunk
 from app.knowledge.embeddings import generate_embedding
+from app.config import settings
 
-# Lazy-load Cross-Encoder reranker
+
+# 1. Custom LangChain-compliant API Cross-Encoder
+class HuggingFaceEndpointCrossEncoder(BaseModel):
+    model_name: str = settings.RERANKER_MODEL_NAME
+    hf_token: str = Field(default_factory=lambda: os.getenv("HF_TOKEN", ""))
+
+    def score(self, text_pairs: List[Tuple[str, str]]) -> List[float]:
+        """Calls HF Inference API without downloading PyTorch into Render memory."""
+        if not self.hf_token:
+            raise ValueError("HF_TOKEN environment variable is missing.")
+
+        url = f"https://api-inference.huggingface.co/models/{self.model_name}"
+        headers = {"Authorization": f"Bearer {self.hf_token}"}
+
+        scores = []
+        for query, candidate in text_pairs:
+            payload = {"inputs": {"source_sentence": query, "sentences": [candidate]}}
+            try:
+                res = requests.post(url, headers=headers, json=payload, timeout=5)
+                if res.status_code == 200:
+                    scores.append(float(res.json()[0]))
+                else:
+                    scores.append(0.0)
+            except Exception:
+                scores.append(0.0)
+
+        return scores
+
+
+# Lazy Singleton Instance
 _reranker = None
 
 
-def get_reranker() -> CrossEncoder:
+def get_reranker() -> HuggingFaceEndpointCrossEncoder:
     global _reranker
     if _reranker is None:
-        _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        _reranker = HuggingFaceEndpointCrossEncoder()
     return _reranker
 
 
+# 2. Hybrid Retrieval & Reranking function
 def search_similar_chunks(
     db: Session,
     query_text: str,
     top_k: int = 10,
     candidate_pool_size: int = 25,
 ) -> list[dict]:
-    """
-    Two-Stage Hybrid & Rerank Retrieval:
-    Stage 1: Candidate Generation via pgvector Cosine Similarity.
-    Stage 2: Cross-Encoder Reranking for deep query-chunk semantic alignment.
-    """
-    # STAGE 1: Fast candidate retrieval via pgvector
+
+    # STAGE 1: Candidate Generation via pgvector
     query_vector = generate_embedding(query_text)
     distance_expr = DocumentChunk.embedding.cosine_distance(query_vector)
 
@@ -40,12 +70,12 @@ def search_similar_chunks(
     if not candidates:
         return []
 
-    # Prepare (Query, Chunk_Text) pairs for Cross-Encoder
-    reranker = get_reranker()
-    pairs = [[query_text, chunk.chunk_text] for chunk, _ in candidates]
+    # Prepare pairs for LangChain Cross-Encoder: [(query, chunk1), (query, chunk2)...]
+    pairs = [(query_text, str(chunk.chunk_text)) for chunk, _ in candidates]
 
-    # STAGE 2: Deep joint-attention reranking
-    rerank_scores = reranker.predict(pairs)
+    # STAGE 2: Score using API Cross-Encoder
+    reranker = get_reranker()
+    rerank_scores = reranker.score(pairs)
 
     retrieved_chunks = []
     for (chunk, distance), score in zip(candidates, rerank_scores):
