@@ -188,3 +188,18 @@ def run_ingestion_pipeline(db: Session, raw_data_dir: str = "data/raw_data"):
         )
         chunks = create_document_chunks(db, doc, pages)
         generate_chunk_embeddings(db, chunks)
+
+
+if __name__ == "__main__":
+    from app.database import SessionLocal
+
+    print("Starting document ingestion pipeline...")
+    db = SessionLocal()
+    try:
+        run_ingestion_pipeline(db, raw_data_dir="data/raw_data")
+        print("Ingestion pipeline completed successfully.")
+    except Exception as e:
+        print(f"Error during ingestion: {e}")
+        db.rollback()
+    finally:
+        db.close()

@@ -8,23 +8,37 @@ st.title("Biodiversity & Ecological Restoration AI Engine")
 
 
 def get_api_url() -> str:
-    # 1. Try environment variable first
+    # 1. Respect explicit environment variable first (e.g., set via terminal or Docker)
     env_url = os.getenv("API_URL")
     if env_url:
-        return env_url
+        return env_url.rstrip("/")
 
-    # 2. Try Streamlit secrets (safely handled if secrets.toml is missing)
+    # 2. Check Streamlit secrets (safely handled if secrets.toml doesn't exist)
     try:
         if "API_URL" in st.secrets:
-            return st.secrets["API_URL"]
+            return st.secrets["API_URL"].rstrip("/")
     except Exception:
         pass
 
-    # 3. Fallback to live Render service URL
+    # 3. Check if local backend is reachable; default to local dev server
+    local_url = "http://localhost:8000"
+    try:
+        # Quick 0.5s ping check to see if local Docker / FastAPI backend is running
+        r = requests.get(f"{local_url}/health", timeout=0.5)
+        if r.status_code == 200:
+            return local_url
+    except Exception:
+        pass
+
+    # 4. Fallback to production Render service
     return "https://biodiversity-backend.onrender.com"
 
 
 BACKEND_URL: str = get_api_url()
+
+# Sidebar indicator so you always know which environment you are connected to
+with st.sidebar:
+    st.caption(f"Connected Backend: `{BACKEND_URL}`")
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = f"demo-{uuid.uuid4()}"
@@ -47,7 +61,7 @@ if user_input := st.chat_input("Ask about land metrics or restoration strategies
 
     with st.spinner("Analyzing ecological data..."):
         try:
-            res = requests.post(f"{BACKEND_URL}/chat", json=payload, timeout=30)
+            res = requests.post(f"{BACKEND_URL}/chat", json=payload, timeout=120)
             res.raise_for_status()
             res_json = res.json()
 
@@ -66,4 +80,4 @@ if user_input := st.chat_input("Ask about land metrics or restoration strategies
                 st.write(bot_reply)
 
         except requests.exceptions.RequestException as e:
-            st.error(f"Failed to connect to backend API: {e}")
+            st.error(f"Failed to connect to backend API ({BACKEND_URL}): {e}")
