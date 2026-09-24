@@ -70,6 +70,8 @@ def _build_fake_structured_response(schema: Type, prompt_value):
                 ),
                 "impacted_metrics": ["soil_organic_carbon", "species_richness"],
                 "time_horizon": "medium-term",
+                "confidence": "High",
+                "tradeoffs": "Requires additional farm management and establishment costs; benefits may take multiple growing seasons to appear",
                 "citations": [citation],
             }
         ],
