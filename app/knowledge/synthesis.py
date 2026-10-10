@@ -5,6 +5,11 @@ from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from app.models.db_models import EnvironmentalObservation
 from app.knowledge.grounding import analyze_observation_with_grounding
+from app.knowledge.rules import (
+    evaluate_rules,
+    build_constraints_block,
+    apply_post_filters,
+)
 from app.models.schemas import GroundedRecommendationResponse
 from app.llm import get_chat_llm
 from app.config import settings
@@ -19,11 +24,17 @@ CRITICAL INSTRUCTIONS:
 2. DO NOT output generic boilerplate recommendations (like "drip irrigation" or "deforestation monitoring") unless directly relevant to the specific metrics/pressures analyzed.
 3. Base all recommendations strictly on the retrieved scientific evidence chunks and cite chunk IDs or document pages for every claim.
 4. Summarize key stressors in the ecological_summary field.
+5. For every recommendation, state its confidence (high, medium, low, or insufficient) and its tradeoffs
+   (the honest cost, failure mode, or precondition) -- never omit these.
+6. Any MANDATORY CONSTRAINTS section below is non-negotiable: it comes from a deterministic rule
+   check, not a suggestion. Follow it exactly, even if it changes which intervention leads.
 """
 
 HUMAN_PROMPT = """
 ENVIRONMENTAL METRICS:
 {metrics}
+
+{constraints}
 
 GROUNDED SCIENTIFIC EVIDENCE:
 {evidence}
@@ -38,15 +49,27 @@ def generate_grounded_recommendation(
 ) -> Dict[str, Any]:
     """
     Synthesizes grounded scientific evidence into structured recommendations using LangChain + Structured Output LLM.
-    Uses Groq when GROQ_API_KEY is set, otherwise falls back to a local
-    Ollama model automatically (see app/llm.py::get_chat_llm).
+
+    A deterministic interaction-rules engine (app.knowledge.rules) runs BEFORE this call decides
+    anything: it evaluates the observation's variables in plain Python and produces mandatory
+    constraints. Those constraints are (1) injected into the LLM's prompt, and (2) enforced again
+    on the LLM's own output afterward, so the rule's effect holds even if the LLM ignores the
+    prompt. The LLM's job is to phrase the recommendation -- not to decide whether a pollinator
+    habitat intervention is safe next to a fixed pesticide schedule.
+
+    Uses Groq when GROQ_API_KEY is set, otherwise falls back to a local Ollama model automatically
+    (see app/llm.py::get_chat_llm), or the fake LLM in CI (USE_FAKE_LLM=1).
     """
-    # 1. Retrieve grounded evidence & provenance from vector store
+    # 1. Deterministic rule evaluation -- no LLM involved.
+    rule_results = evaluate_rules(observation)
+    constraints_block = build_constraints_block(rule_results)
+
+    # 2. Retrieve grounded evidence & provenance from vector store
     grounded_payload = analyze_observation_with_grounding(
         db, observation, top_k_per_query=1
     )
 
-    # 2. Format retrieved evidence blocks for prompt context
+    # 3. Format retrieved evidence blocks for prompt context
     evidence_text_blocks = []
     for idx, ev in enumerate(grounded_payload.get("scientific_evidence", []), start=1):
         prov = ev.get("provenance") or {}
@@ -68,10 +91,10 @@ def generate_grounded_recommendation(
     )
     metrics_context = str(grounded_payload.get("metrics", {}))
 
-    # 3. LLM Setup -- Groq if GROQ_API_KEY is present, else local Ollama fallback.
+    # 4. LLM Setup -- Groq if GROQ_API_KEY is present, else local Ollama fallback (or fake in CI).
     llm = get_chat_llm(temperature=getattr(settings, "LLM_TEMPERATURE", 0.1))
 
-    # 4. Enforce Pydantic Structured Output
+    # 5. Enforce Pydantic Structured Output
     structured_llm = llm.with_structured_output(GroundedRecommendationResponse)
 
     prompt = ChatPromptTemplate.from_messages(
@@ -83,15 +106,16 @@ def generate_grounded_recommendation(
 
     chain = prompt | structured_llm
 
-    # 5. Invoke Chain
+    # 6. Invoke Chain
     result = chain.invoke(
         {
             "metrics": metrics_context,
+            "constraints": constraints_block,
             "evidence": evidence_context,
         }
     )
 
-    # 6. Normalize output dictionary and preserve observation_id
+    # 7. Normalize output dictionary and preserve observation_id
     if isinstance(result, GroundedRecommendationResponse):
         result.observation_id = cast(int, observation.id)
         output_dict = result.model_dump()
@@ -105,5 +129,12 @@ def generate_grounded_recommendation(
             "primary_pressures": [],
             "recommendations": [],
         }
+
+    # 8. Deterministic post-filter -- fires regardless of LLM compliance, and
+    # records which rules fired for an auditable trace in the response.
+    output_dict["recommendations"] = apply_post_filters(
+        rule_results, output_dict.get("recommendations", [])
+    )
+    output_dict["rule_trace"] = [f"{r.rule_id}: {r.reason}" for r in rule_results]
 
     return output_dict

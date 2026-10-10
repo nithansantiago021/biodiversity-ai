@@ -133,3 +133,38 @@ Standard Water Query:
 Clarification Trigger Query:
 
         "how to mitigate land detoriation?"
+
+## System Limitations & Future Scalability
+
+### Current Limitations (v1.0)
+
+1. **Serverless Inference Latency & Rate Limits:**
+   * **Constraint:** Offloading dense vector generation (`all-MiniLM-L6-v2`) and cross-encoder reranking (`ms-marco-MiniLM-L-6-v2`) to Hugging Face’s Serverless Inference API eliminates local memory overhead (<50MB RAM), but introduces cold-start latency (1–3 seconds) on un-cached requests and relies on free-tier rate limits.
+   
+2. **Dynamic Heuristics vs. Rigid Deterministic Constraints:**
+  * **Architectural Trade-off:** To support direct, zero-shot ingestion of unstructured research PDFs, environmental reports, and regional restoration handbooks, the system shifted away from rigid, hard-coded numerical boundary rules. Because raw scientific literature exhibits diverse reporting units, variable metric ranges, and context-dependent ecological thresholds, relying on static deterministic rules proved brittle and prone to unanswerable state loops. 
+
+3. **Geospatial & Vector Ingestion Scope:**
+   * **Constraint:** The ingestion pipeline currently processes structured numerical datasets (`.csv`) and unstructured scientific literature (`.pdf`, `.md`, `.txt`). It does not natively parse raw geospatial vector formats (e.g., GeoJSON, shapefiles, raster satellite imagery).
+
+---
+
+### Future Scalability & Roadmap (v2.0)
+
+#### 1. Hybrid GraphRAG for Complex Ecological Causality
+* **Upgrade:** Transition from purely dense vector similarity search to a hybrid **Graph-RAG** model using `pg_graphql` or Neo4j.
+* **Impact:** Explicitly maps causal relationship networks between soil chemistry deltas, microclimate shifts, and native plant survival rates, guaranteeing deeper multi-variable reasoning.
+
+#### Deterministic Ecological Boundary Model & Standardized Dataset
+* **Evolution:** To bridge the gap between flexible LLM heuristic synthesis and strict biological limits, future iterations will introduce a dedicated, curated **Environmental Metric & Species Threshold Dataset**.
+* **Impact:**
+  * **Standardized Knowledge Mapping:** Standardizes disparate unstructured PDF inputs into a structured schema of verified numerical boundary bounds (e.g., explicit pH, soil organic carbon, salinity, and rainfall tolerance ranges per native species).
+  * **Hybrid Deterministic Validation Node:** Integrates a pre-retrieval validation node inside the `LangGraph` state machine. This node evaluates candidate species against hard environmental limits before triggering RAG retrieval—combining the strict accuracy of deterministic rules with the generative depth of LLM synthesis.
+
+#### 3. PostGIS Spatial Layer Integration
+* **Upgrade:** Expand the database layer from `pgvector` to include **PostGIS 3.4** and GeoAlchemy2.
+* **Impact:** Allows users to upload regional GeoJSON polygon boundaries or draw land parcels on an interactive Mapbox map, triggering automatic spatial joins against historical soil and climate raster grids.
+
+#### 4. Dedicated Inference Infrastructure
+* **Upgrade:** Migrate from public serverless API endpoints to dedicated **Text Embeddings Inference (TEI)** containers on GPU-backed instances (e.g., AWS ECS or RunPod).
+* **Impact:** Sub-50ms vector search latency and 100% control over throughput and request concurrency.

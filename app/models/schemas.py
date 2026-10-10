@@ -29,6 +29,14 @@ class EnvironmentalObservation(BaseModel):
     pollution_index: float = Field(..., ge=0)
     deforestation_rate: float = Field(..., ge=0)
 
+    # Management signals used by the deterministic interaction-rules engine
+    pesticide_use: Optional[bool] = Field(
+        None, description="True if the site sprays pesticides on a fixed schedule"
+    )
+    grazing_controlled: Optional[bool] = Field(
+        None, description="True if grazing on this land is actively managed/controlled"
+    )
+
 
 class CitationSchema(BaseModel):
     document_title: str
@@ -46,6 +54,11 @@ class ActionableRecommendation(BaseModel):
         ...,
         description="Implementation timeframe: short-term, medium-term, or long-term",
     )
+    confidence: str = Field(..., description="One of: high, medium, low, insufficient")
+    tradeoffs: str = Field(
+        ...,
+        description="The honest cost, failure mode, or precondition for this intervention",
+    )
     citations: List[CitationSchema] = Field(
         ..., description="Exact references to grounded evidence chunks used"
     )
@@ -60,6 +73,10 @@ class GroundedRecommendationResponse(BaseModel):
         ..., description="Key ecological stress drivers identified"
     )
     recommendations: List[ActionableRecommendation]
+    rule_trace: List[str] = Field(
+        default_factory=list,
+        description="Deterministic interaction rules that fired for this observation, for auditability",
+    )
 
 
 class ChatRequest(BaseModel):

@@ -3,6 +3,7 @@ from sqlalchemy import (
     Integer,
     String,
     Float,
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -39,6 +40,9 @@ class EnvironmentalObservation(Base):
 
     pollution_index = Column(Float, nullable=False)
     deforestation_rate = Column(Float, nullable=False)
+
+    pesticide_use = Column(Boolean, nullable=True)
+    grazing_controlled = Column(Boolean, nullable=True)
 
 
 class Document(Base):

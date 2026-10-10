@@ -66,6 +66,9 @@ def test_generate_grounded_recommendation_returns_structured_output():
         assert "description" in first_rec
         assert "time_horizon" in first_rec
         assert "citations" in first_rec
+        assert "confidence" in first_rec
+        assert "tradeoffs" in first_rec
+        assert isinstance(first_rec["tradeoffs"], str)
         assert len(first_rec["citations"]) > 0
 
     finally:
