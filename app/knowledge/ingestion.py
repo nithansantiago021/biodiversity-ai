@@ -48,7 +48,7 @@ def create_document(
     document_type: str = "report",
 ) -> Document:
     """Create and persist a Document record if it doesn't already exist."""
-    existing_doc = db.query(Document).filter(Document.title == title).first()
+    existing_doc = db.query(Document).filter_by(title=title).first()
     if existing_doc:
         return existing_doc
 

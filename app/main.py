@@ -62,11 +62,7 @@ def get_recommendation_for_observation(
     Triggers the multi-step LangGraph Agent workflow for a stored EnvironmentalObservation ID.
     Executes grounding, two-stage vector retrieval, LLM synthesis, and provenance self-validation.
     """
-    obs = (
-        db.query(EnvironmentalObservationDB)
-        .filter(EnvironmentalObservationDB.id == observation_id)
-        .first()
-    )
+    obs = db.query(EnvironmentalObservationDB).filter_by(id=observation_id).first()
     if not obs:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

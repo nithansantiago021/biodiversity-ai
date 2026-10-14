@@ -1,6 +1,6 @@
 import os
 import requests
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.models.db_models import DocumentChunk
@@ -37,7 +37,7 @@ class HuggingFaceEndpointCrossEncoder(BaseModel):
 
 
 # Lazy Singleton Instance
-_reranker = None
+_reranker: Optional[HuggingFaceEndpointCrossEncoder] = None
 
 
 def get_reranker() -> HuggingFaceEndpointCrossEncoder:
@@ -57,6 +57,8 @@ def search_similar_chunks(
 
     # STAGE 1: Candidate Generation via pgvector
     query_vector = generate_embedding(query_text)
+
+    # Explicit type ignore for pgvector ORM extensions:
     distance_expr = DocumentChunk.embedding.cosine_distance(query_vector)
 
     candidates = (

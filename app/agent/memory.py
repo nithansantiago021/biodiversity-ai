@@ -1,4 +1,5 @@
 from typing import List, Dict, cast
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 from app.models.db_models import ChatMessage
 
@@ -18,14 +19,14 @@ def get_chat_history(
     db: Session, session_id: str, limit: int = 10
 ) -> List[Dict[str, str]]:
     """Retrieves chronological chat history for a given session_id."""
-    messages = (
-        db.query(ChatMessage)
-        .filter(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.id.desc())
+    stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(desc(ChatMessage.id))
         .limit(limit)
-        .all()
     )
-    # Reverse list so it returns chronological order (oldest -> newest)
+    messages = db.scalars(stmt).all()
+
     return [
         {
             "role": cast(str, msg.role),
