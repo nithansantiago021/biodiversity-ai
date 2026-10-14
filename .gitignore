@@ -24,3 +24,4 @@ postgres_data/
 *.sqlite3
 
 .langgraph_api
+opencode.json
