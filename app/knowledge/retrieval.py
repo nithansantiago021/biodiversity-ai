@@ -58,15 +58,12 @@ def search_similar_chunks(
     # STAGE 1: Candidate Generation via pgvector
     query_vector = generate_embedding(query_text)
 
-    # Use getattr to prevent mypy static attribute resolution errors across different environments
     cosine_dist_fn = getattr(DocumentChunk.embedding, "cosine_distance")
     distance_expr = cosine_dist_fn(query_vector)
 
     candidates = (
         db.query(DocumentChunk, distance_expr.label("distance"))
-        .filter(
-            DocumentChunk.embedding.isnot(None)
-        )  # Standard PEP 8 / SQLAlchemy NULL check
+        .filter(DocumentChunk.embedding.is_not(None))  # type: ignore[attr-defined]
         .order_by(distance_expr)
         .limit(candidate_pool_size)
         .all()
