@@ -21,7 +21,7 @@ def get_chat_history(
     """Retrieves chronological chat history for a given session_id."""
     stmt = (
         select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
+        .where(ChatMessage.session_id == session_id)  # type: ignore[arg-type]
         .order_by(desc(ChatMessage.id))
         .limit(limit)
     )
