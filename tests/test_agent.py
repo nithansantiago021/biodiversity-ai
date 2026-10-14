@@ -4,14 +4,36 @@ from langchain_core.runnables import RunnableConfig
 
 from app.database import SessionLocal
 from app.models.db_models import EnvironmentalObservation
+from app.knowledge.ingestion import create_document, create_document_chunks
+from app.knowledge.embeddings import generate_chunk_embeddings
 from app.agent.workflow import biodiversity_agent, BiodiversityAgentState
 
 
 def test_langgraph_agent_execution_end_to_end(knowledge_base):
     db = SessionLocal()
     obs = None
+    doc = None
+    chunks = []
 
     try:
+        # 1. Seed a test document and chunk so the retrieval node finds evidence on empty DBs
+        doc = create_document(
+            db,
+            title="Agent End-to-End Test Document",
+            source="Agent Test Source",
+            organization="Test Organization",
+            document_type="report",
+        )
+        pages = [
+            {
+                "page_number": 1,
+                "text": "Soil organic carbon increases water retention and supports soil microbial biodiversity in degraded agricultural lands.",
+            }
+        ]
+        chunks = create_document_chunks(db, doc, pages)
+        generate_chunk_embeddings(db, chunks)
+
+        # 2. Seed observation
         obs = EnvironmentalObservation(
             latitude=13.0827,
             longitude=80.2707,
@@ -54,7 +76,11 @@ def test_langgraph_agent_execution_end_to_end(knowledge_base):
         assert len(final_state["errors"]) == 0
 
     finally:
+        for chunk in chunks:
+            db.delete(chunk)
+        if doc:
+            db.delete(doc)
         if obs:
             db.delete(obs)
-            db.commit()
+        db.commit()
         db.close()
